@@ -6,7 +6,9 @@ Flask application serving risk scores, lending decisions, and forecasts.
 Endpoints
 ---------
     GET /                          → Dashboard overview
+    GET /predict                   → Prediction form
     GET /commodity/<name>          → Commodity detail page
+    POST /api/predict              → Live prediction (JSON)
     GET /api/scores                → All risk scores (JSON)
     GET /api/scores/<commodity>    → Scores for one commodity (JSON)
     GET /api/summary               → Summary statistics (JSON)
@@ -31,6 +33,9 @@ import pandas as pd
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
 
+from src.api.predict import predict_bp
+from src.features.build_serving_snapshot import load_snapshot
+from src.serving.model_registry import load_all_models, loaded_model_count
 from src.storage.s3_client import S3Client
 
 # Load .env file if present (for local development)
@@ -50,6 +55,9 @@ app.secret_key = os.environ.get(
     os.environ.get("SECRET_KEY", "dev-only-change-in-production"),
 )
 
+# Register blueprints
+app.register_blueprint(predict_bp)
+
 # Application startup timestamp for /health endpoint
 _START_TIME = time.time()
 
@@ -58,6 +66,7 @@ _START_TIME = time.time()
 # ---------------------------------------------------------------------------
 
 _scored_df: pd.DataFrame | None = None
+_serving_snapshot: pd.DataFrame | None = None
 
 
 def _load_scored_data() -> pd.DataFrame:
@@ -74,10 +83,43 @@ def _load_scored_data() -> pd.DataFrame:
     return _scored_df
 
 
+def _load_serving_snapshot() -> pd.DataFrame:
+    """Load the latest feature-serving snapshot from S3 into memory.
+
+    The snapshot contains one row per (mandi_id, commodity) with the most
+    recent feature vector — used by the live prediction endpoint.
+    """
+    global _serving_snapshot
+    if _serving_snapshot is not None:
+        return _serving_snapshot
+
+    try:
+        log.info("Loading serving snapshot from S3...")
+        _serving_snapshot = load_snapshot()
+        log.info(
+            "Loaded serving snapshot: %d rows, %d cols",
+            len(_serving_snapshot), len(_serving_snapshot.columns),
+        )
+    except FileNotFoundError:
+        log.warning(
+            "Serving snapshot not found on S3 — live predictions will be "
+            "unavailable until build_serving_snapshot.py is run."
+        )
+        _serving_snapshot = pd.DataFrame()
+
+    return _serving_snapshot
+
+
 
 # ---------------------------------------------------------------------------
 # HTML routes
 # ---------------------------------------------------------------------------
+
+@app.route("/predict")
+def predict_page():
+    """Prediction form page."""
+    return render_template("predict.html")
+
 
 # ---------------------------------------------------------------------------
 # Health & readiness
@@ -92,6 +134,8 @@ def health_check():
     """
     uptime_s = round(time.time() - _START_TIME, 1)
     data_loaded = _scored_df is not None and len(_scored_df) > 0
+    snapshot_loaded = _serving_snapshot is not None and len(_serving_snapshot) > 0
+    n_models = loaded_model_count()
     status = "healthy" if data_loaded else "degraded"
     http_code = 200 if data_loaded else 503
 
@@ -100,6 +144,9 @@ def health_check():
         "uptime_seconds": uptime_s,
         "data_loaded": data_loaded,
         "rows_loaded": len(_scored_df) if _scored_df is not None else 0,
+        "serving_snapshot_loaded": snapshot_loaded,
+        "serving_snapshot_rows": len(_serving_snapshot) if _serving_snapshot is not None else 0,
+        "models_loaded": n_models,
         "version": os.environ.get("AGRIVAULT_VERSION", "unknown"),
     }), http_code
 
@@ -388,6 +435,14 @@ if __name__ == "__main__":
 
     # Pre-load data
     _load_scored_data()
+    _load_serving_snapshot()
+
+    # Load trained models into memory
+    try:
+        n = load_all_models()
+        log.info("Loaded %d models into registry", n)
+    except Exception as exc:
+        log.warning("Could not load models: %s — predictions will be unavailable", exc)
 
     log.info("Starting AgriVault Dashboard on %s:%d", args.host, args.port)
     app.run(host=args.host, port=args.port, debug=args.debug)

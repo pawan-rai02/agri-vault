@@ -21,8 +21,38 @@ from src.models.risk_ltv_model import RiskLTVModel, COMMODITY_RISK_TIER
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# Helpers & Fixtures
 # ---------------------------------------------------------------------------
+
+# Default column values for a single-row risk DataFrame.
+_RISK_DEFAULTS = {
+    "state": "TEST",
+    "district": "TEST",
+    "commodity": "WHEAT",
+    "mandi_mean_price": 2500.0,
+    "mandi_std_price": 200.0,
+    "mandi_n_days": 300,
+    "total_capacity_mt": 5000.0,
+    "n_warehouses": 2,
+    "commodity_category": "Cereal",
+    "portfolio_default_rate": 0.063,
+    "portfolio_mean_ltv": 0.70,
+    "price_cv": 0.10,
+    "forecast_uncertainty": 0.30,
+    "risk_score_proxy": 0.40,
+    "recommended_max_ltv": 0.60,
+}
+
+
+def _make_risk_row(**overrides) -> pd.DataFrame:
+    """Build a single-row risk DataFrame with sensible defaults.
+
+    Any keyword argument overrides the corresponding default column value.
+    Example: _make_risk_row(commodity="TOMATO", price_cv=0.80)
+    """
+    row = {**_RISK_DEFAULTS, **overrides}
+    return pd.DataFrame({k: [v] for k, v in row.items()})
+
 
 @pytest.fixture
 def sample_risk_df() -> pd.DataFrame:
@@ -102,31 +132,23 @@ class TestDecision:
 
     def test_low_risk_approve(self, model):
         """Very low CV, good warehouses, stable commodity → APPROVE."""
-        df = pd.DataFrame({
-            "state": ["TEST"], "district": ["TEST"],
-            "commodity": ["WHEAT"],
-            "mandi_mean_price": [2500.0], "mandi_std_price": [50.0],
-            "mandi_n_days": [300], "total_capacity_mt": [10000.0],
-            "n_warehouses": [10], "commodity_category": ["Cereal"],
-            "portfolio_default_rate": [0.063], "portfolio_mean_ltv": [0.70],
-            "price_cv": [0.02], "forecast_uncertainty": [0.10],
-            "risk_score_proxy": [0.20], "recommended_max_ltv": [0.70],
-        })
+        df = _make_risk_row(
+            mandi_std_price=50.0, total_capacity_mt=10000.0,
+            n_warehouses=10, price_cv=0.02, forecast_uncertainty=0.10,
+            risk_score_proxy=0.20, recommended_max_ltv=0.70,
+        )
         scored = model.score(df)
         assert scored.iloc[0]["decision"] == "APPROVE"
 
     def test_high_risk_reject(self, model):
         """High CV, no warehouses, perishable → REJECT."""
-        df = pd.DataFrame({
-            "state": ["TEST"], "district": ["TEST"],
-            "commodity": ["TOMATO"],
-            "mandi_mean_price": [3000.0], "mandi_std_price": [1500.0],
-            "mandi_n_days": [50], "total_capacity_mt": [0.0],
-            "n_warehouses": [0], "commodity_category": ["Vegetable"],
-            "portfolio_default_rate": [0.063], "portfolio_mean_ltv": [0.70],
-            "price_cv": [0.80], "forecast_uncertainty": [0.90],
-            "risk_score_proxy": [0.80], "recommended_max_ltv": [0.40],
-        })
+        df = _make_risk_row(
+            commodity="TOMATO", mandi_mean_price=3000.0,
+            mandi_std_price=1500.0, mandi_n_days=50, total_capacity_mt=0.0,
+            n_warehouses=0, commodity_category="Vegetable",
+            price_cv=0.80, forecast_uncertainty=0.90,
+            risk_score_proxy=0.80, recommended_max_ltv=0.40,
+        )
         scored = model.score(df)
         assert scored.iloc[0]["decision"] == "REJECT"
 
@@ -158,16 +180,11 @@ class TestLTVRecommendation:
         risks = np.linspace(0.1, 0.9, 9)
         ltvs = []
         for r in risks:
-            df = pd.DataFrame({
-                "state": ["T"], "district": ["T"],
-                "commodity": ["WHEAT"],
-                "mandi_mean_price": [2500.0], "mandi_std_price": [2500 * r],
-                "mandi_n_days": [300], "total_capacity_mt": [5000.0],
-                "n_warehouses": [int((1 - r) * 5)], "commodity_category": ["Cereal"],
-                "portfolio_default_rate": [0.063], "portfolio_mean_ltv": [0.70],
-                "price_cv": [r], "forecast_uncertainty": [r],
-                "risk_score_proxy": [r], "recommended_max_ltv": [0.70 - r * 0.3],
-            })
+            df = _make_risk_row(
+                mandi_std_price=2500 * r, n_warehouses=int((1 - r) * 5),
+                price_cv=r, forecast_uncertainty=r,
+                risk_score_proxy=r, recommended_max_ltv=0.70 - r * 0.3,
+            )
             scored = model.score(df)
             ltvs.append(scored.iloc[0]["recommended_ltv"])
         # LTV should generally decrease (allow some tolerance for non-monotonicity)
@@ -198,43 +215,20 @@ class TestCommodityTier:
 class TestNullHandling:
 
     def test_nulls_in_cv(self, model):
-        df = pd.DataFrame({
-            "state": ["T"], "district": ["T"],
-            "commodity": ["WHEAT"],
-            "mandi_mean_price": [2500.0], "mandi_std_price": [np.nan],
-            "mandi_n_days": [300], "total_capacity_mt": [5000.0],
-            "n_warehouses": [2], "commodity_category": ["Cereal"],
-            "portfolio_default_rate": [0.063], "portfolio_mean_ltv": [0.70],
-            "price_cv": [np.nan], "forecast_uncertainty": [0.3],
-            "risk_score_proxy": [0.4], "recommended_max_ltv": [0.60],
-        })
+        df = _make_risk_row(mandi_std_price=np.nan, price_cv=np.nan)
         scored = model.score(df)
         assert not scored["risk_score"].isna().any()
 
     def test_nulls_in_forecast_uncertainty(self, model):
-        df = pd.DataFrame({
-            "state": ["T"], "district": ["T"],
-            "commodity": ["WHEAT"],
-            "mandi_mean_price": [2500.0], "mandi_std_price": [200.0],
-            "mandi_n_days": [300], "total_capacity_mt": [5000.0],
-            "n_warehouses": [2], "commodity_category": ["Cereal"],
-            "portfolio_default_rate": [0.063], "portfolio_mean_ltv": [0.70],
-            "price_cv": [0.10], "forecast_uncertainty": [np.nan],
-            "risk_score_proxy": [0.4], "recommended_max_ltv": [0.60],
-        })
+        df = _make_risk_row(forecast_uncertainty=np.nan)
         scored = model.score(df)
         assert not scored["risk_score"].isna().any()
 
     def test_unknown_commodity(self, model):
-        df = pd.DataFrame({
-            "state": ["T"], "district": ["T"],
-            "commodity": ["UNKNOWN_FRUIT"],
-            "mandi_mean_price": [1000.0], "mandi_std_price": [200.0],
-            "mandi_n_days": [100], "total_capacity_mt": [0.0],
-            "n_warehouses": [0], "commodity_category": ["Other"],
-            "portfolio_default_rate": [0.063], "portfolio_mean_ltv": [0.70],
-            "price_cv": [0.20], "forecast_uncertainty": [0.3],
-            "risk_score_proxy": [0.4], "recommended_max_ltv": [0.60],
-        })
+        df = _make_risk_row(
+            commodity="UNKNOWN_FRUIT", mandi_mean_price=1000.0,
+            mandi_n_days=100, total_capacity_mt=0.0, n_warehouses=0,
+            commodity_category="Other",
+        )
         scored = model.score(df)
         assert not scored["risk_score"].isna().any()

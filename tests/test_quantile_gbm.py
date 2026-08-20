@@ -32,8 +32,28 @@ from src.models.quantile_gbm.hypertuner import walk_forward_splits
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# Helpers & Fixtures
 # ---------------------------------------------------------------------------
+
+_GBM_DEFAULTS = {
+    "quantiles": [0.50],
+    "n_estimators": 20,
+    "learning_rate": 0.1,
+    "max_depth": 3,
+    "min_samples_leaf": 10,
+    "random_state": 42,
+}
+
+
+def _make_gbm(**overrides) -> QuantileGBM:
+    """Build a QuantileGBM with sensible defaults.
+
+    Any keyword argument overrides the corresponding default.
+    Example: _make_gbm(quantiles=[0.10, 0.50, 0.90], n_estimators=30)
+    """
+    params = {**_GBM_DEFAULTS, **overrides}
+    return QuantileGBM(**params)
+
 
 @pytest.fixture
 def synthetic_data():
@@ -191,15 +211,7 @@ class TestQuantileGBM:
 
     def test_fit_and_predict(self, synthetic_data):
         X, y = synthetic_data
-        model = QuantileGBM(
-            quantiles=[0.10, 0.50, 0.90],
-            n_estimators=20,
-            learning_rate=0.1,
-            max_depth=3,
-            min_samples_leaf=10,
-            subsample=0.8,
-            random_state=42,
-        )
+        model = _make_gbm(quantiles=[0.10, 0.50, 0.90], subsample=0.8)
         model.fit(X, y)
         preds = model.predict(X)
         assert set(preds.keys()) == {0.10, 0.50, 0.90}
@@ -210,14 +222,7 @@ class TestQuantileGBM:
     def test_quantile_ordering(self, synthetic_data):
         """q10 predictions should generally be <= q50 <= q90."""
         X, y = synthetic_data
-        model = QuantileGBM(
-            quantiles=[0.10, 0.50, 0.90],
-            n_estimators=30,
-            learning_rate=0.1,
-            max_depth=3,
-            min_samples_leaf=10,
-            random_state=42,
-        )
+        model = _make_gbm(quantiles=[0.10, 0.50, 0.90], n_estimators=30)
         model.fit(X, y)
         preds = model.predict(X)
         # On average across all samples, q10 <= q50 <= q90
@@ -229,33 +234,21 @@ class TestQuantileGBM:
 
     def test_predict_quantile_single(self, synthetic_data):
         X, y = synthetic_data
-        model = QuantileGBM(
-            quantiles=[0.50],
-            n_estimators=10,
-            learning_rate=0.1,
-            max_depth=3,
-            random_state=42,
-        )
+        model = _make_gbm(n_estimators=10)
         model.fit(X, y)
         preds = model.predict_quantile(X, 0.50)
         assert preds.shape == (500,)
 
     def test_predict_quantile_untrained_raises(self, synthetic_data):
         X, y = synthetic_data
-        model = QuantileGBM(quantiles=[0.50], n_estimators=10, random_state=42)
+        model = _make_gbm(n_estimators=10)
         model.fit(X, y)
         with pytest.raises(ValueError, match="not trained"):
             model.predict_quantile(X, 0.90)
 
     def test_training_losses_tracked(self, synthetic_data):
         X, y = synthetic_data
-        model = QuantileGBM(
-            quantiles=[0.50],
-            n_estimators=20,
-            learning_rate=0.1,
-            max_depth=3,
-            random_state=42,
-        )
+        model = _make_gbm()
         model.fit(X, y)
         losses = model.training_losses()
         assert 0.50 in losses
@@ -265,11 +258,7 @@ class TestQuantileGBM:
 
     def test_n_trained_trees(self, synthetic_data):
         X, y = synthetic_data
-        model = QuantileGBM(
-            quantiles=[0.10, 0.50, 0.90],
-            n_estimators=15,
-            random_state=42,
-        )
+        model = _make_gbm(quantiles=[0.10, 0.50, 0.90], n_estimators=15)
         model.fit(X, y)
         counts = model.n_trained_trees()
         assert all(v == 15 for v in counts.values())
@@ -279,13 +268,7 @@ class TestQuantileGBM:
         rng = np.random.default_rng(42)
         X = rng.uniform(0, 10, size=(30, 2))
         y = X[:, 0] * 2 + rng.normal(0, 0.5, size=30)
-        model = QuantileGBM(
-            quantiles=[0.50],
-            n_estimators=5,
-            max_depth=2,
-            min_samples_leaf=3,
-            random_state=42,
-        )
+        model = _make_gbm(n_estimators=5, max_depth=2, min_samples_leaf=3)
         model.fit(X, y)
         preds = model.predict(X)
         assert preds[0.50].shape == (30,)

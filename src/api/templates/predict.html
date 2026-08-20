@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Predict LTV — AgriVault</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
+        .header { background: linear-gradient(135deg, #2d5016 0%, #4a7c23 100%); color: white; padding: 24px 32px; }
+        .header h1 { font-size: 24px; }
+        .header p { opacity: 0.85; font-size: 14px; margin-top: 4px; }
+        .header a { color: white; opacity: 0.8; font-size: 13px; text-decoration: none; }
+        .header a:hover { opacity: 1; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+        .section { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 24px; }
+        .section h2 { font-size: 18px; margin-bottom: 16px; color: #2d5016; }
+
+        /* Form */
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600; }
+        .form-group input, .form-group select { padding: 10px 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: #4a7c23; }
+        .form-group .hint { font-size: 11px; color: #999; margin-top: 2px; }
+
+        .btn { padding: 12px 24px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+        .btn-primary { background: #4a7c23; color: white; }
+        .btn-primary:hover { background: #3d6a1c; }
+        .btn-primary:disabled { background: #a0c88a; cursor: not-allowed; }
+
+        /* Results */
+        .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
+        @media (max-width: 768px) { .results-grid { grid-template-columns: 1fr; } }
+
+        .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .kpi-card { background: #f9fbf7; border-radius: 10px; padding: 16px; border: 1px solid #e8f0e0; }
+        .kpi-card .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+        .kpi-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+
+        .badge { display: inline-block; padding: 4px 14px; border-radius: 14px; font-size: 13px; font-weight: 700; }
+        .badge.approve { background: #e8f5e9; color: #2d8a4e; }
+        .badge.conditional { background: #fff8e1; color: #b8860b; }
+        .badge.reject { background: #fce4ec; color: #c0392b; }
+
+        /* Forecast chart */
+        .chart-container { position: relative; width: 100%; height: 280px; margin-top: 12px; }
+        canvas { width: 100% !important; height: 100% !important; }
+
+        /* Resolution info */
+        .resolution-info { background: #f0f7ff; border: 1px solid #d0e3f7; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #2c5aa0; margin-top: 12px; }
+
+        /* Error */
+        .error-box { background: #fce4ec; border: 1px solid #f5c6cb; border-radius: 8px; padding: 14px; color: #c0392b; margin-top: 16px; }
+
+        /* Explanation */
+        .explanation-table { width: 100%; font-size: 13px; }
+        .explanation-table td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; }
+        .explanation-table td:first-child { color: #666; font-weight: 500; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="/">← Back to Dashboard</a>
+        <h1>🌾 Predict LTV</h1>
+        <p>Live risk scoring and loan-to-value prediction for agricultural commodities</p>
+    </div>
+
+    <div class="container">
+        <!-- Prediction Form -->
+        <div class="section">
+            <h2>Enter Details</h2>
+            <form id="predictForm">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="commodity">Commodity *</label>
+                        <input type="text" id="commodity" name="commodity" placeholder="e.g. WHEAT" required>
+                        <span class="hint">UPPERCASE preferred (e.g. WHEAT, TOMATO, ONION)</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="state">State *</label>
+                        <input type="text" id="state" name="state" placeholder="e.g. MAHARASHTRA" required>
+                        <span class="hint">Full state name (case-insensitive)</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="district">District</label>
+                        <input type="text" id="district" name="district" placeholder="e.g. PUNE (optional)">
+                    </div>
+                    <div class="form-group">
+                        <label for="market">Market / Mandi</label>
+                        <input type="text" id="market" name="market" placeholder="e.g. Pune (optional)">
+                    </div>
+                    <div class="form-group">
+                        <label for="quantity_kg">Quantity (kg)</label>
+                        <input type="number" id="quantity_kg" name="quantity_kg" placeholder="e.g. 5000" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="warehouse_grade">Warehouse Grade</label>
+                        <select id="warehouse_grade" name="warehouse_grade">
+                            <option value="A">A — Best</option>
+                            <option value="B" selected>B — Standard</option>
+                            <option value="C">C — Basic</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="requested_loan_amount">Requested Loan (₹)</label>
+                        <input type="number" id="requested_loan_amount" name="requested_loan_amount" placeholder="e.g. 100000" min="0">
+                    </div>
+                </div>
+                <div style="margin-top: 20px;">
+                    <button type="submit" class="btn btn-primary" id="submitBtn">🔍 Get Prediction</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Error Display -->
+        <div id="errorBox" class="error-box" style="display: none;"></div>
+
+        <!-- Results -->
+        <div id="results" style="display: none;">
+            <!-- KPI Cards -->
+            <div class="kpi-row">
+                <div class="kpi-card">
+                    <div class="label">Risk Score</div>
+                    <div class="value" id="riskScore">—</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="label">Decision</div>
+                    <div class="value" id="decision">—</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="label">Recommended LTV</div>
+                    <div class="value" id="ltvValue">—</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="label">Max Loan Amount</div>
+                    <div class="value" id="maxLoan">—</div>
+                </div>
+            </div>
+
+            <div class="results-grid">
+                <!-- Forecast Band Chart -->
+                <div class="section">
+                    <h2>Price Forecast</h2>
+                    <div class="chart-container">
+                        <canvas id="forecastChart"></canvas>
+                    </div>
+                    <div id="resolutionInfo" class="resolution-info" style="display: none;"></div>
+                </div>
+
+                <!-- Risk Explanation -->
+                <div class="section">
+                    <h2>Risk Breakdown</h2>
+                    <table class="explanation-table" id="explanationTable">
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ── Simple canvas chart for forecast band ──────────────────────
+        function drawForecastChart(canvasId, forecast) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+
+            // Set canvas size
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            const W = rect.width;
+            const H = rect.height;
+
+            ctx.clearRect(0, 0, W, H);
+
+            const horizons = ['7d', '15d', '30d'];
+            const highs = horizons.map(h => forecast[h]?.high).filter(v => v != null);
+            const lows = horizons.map(h => forecast[h]?.low).filter(v => v != null);
+            const medians = horizons.map(h => forecast[h]?.median).filter(v => v != null);
+
+            if (medians.length === 0) return;
+
+            const allVals = [...highs, ...lows, ...medians];
+            const minVal = Math.min(...allVals) * 0.95;
+            const maxVal = Math.max(...allVals) * 1.05;
+            const range = maxVal - minVal || 1;
+
+            const pad = { top: 30, right: 30, bottom: 40, left: 60 };
+            const chartW = W - pad.left - pad.right;
+            const chartH = H - pad.top - pad.bottom;
+
+            function xPos(i) { return pad.left + (i / (horizons.length - 1)) * chartW; }
+            function yPos(v) { return pad.top + chartH - ((v - minVal) / range) * chartH; }
+
+            // ── Draw confidence band (high → low fill) ──
+            if (highs.length === lows.length && highs.length > 1) {
+                ctx.beginPath();
+                for (let i = 0; i < highs.length; i++) {
+                    const x = xPos(i);
+                    if (i === 0) ctx.moveTo(x, yPos(highs[i]));
+                    else ctx.lineTo(x, yPos(highs[i]));
+                }
+                for (let i = lows.length - 1; i >= 0; i--) {
+                    ctx.lineTo(xPos(i), yPos(lows[i]));
+                }
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(74, 124, 35, 0.15)';
+                ctx.fill();
+            }
+
+            // ── Draw high line ──
+            if (highs.length > 1) {
+                ctx.beginPath();
+                ctx.strokeStyle = '#4caf50';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 3]);
+                for (let i = 0; i < highs.length; i++) {
+                    if (i === 0) ctx.moveTo(xPos(i), yPos(highs[i]));
+                    else ctx.lineTo(xPos(i), yPos(highs[i]));
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // ── Draw median line ──
+            ctx.beginPath();
+            ctx.strokeStyle = '#2d5016';
+            ctx.lineWidth = 3;
+            for (let i = 0; i < medians.length; i++) {
+                if (i === 0) ctx.moveTo(xPos(i), yPos(medians[i]));
+                else ctx.lineTo(xPos(i), yPos(medians[i]));
+            }
+            ctx.stroke();
+
+            // ── Draw low line ──
+            if (lows.length > 1) {
+                ctx.beginPath();
+                ctx.strokeStyle = '#f44336';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 3]);
+                for (let i = 0; i < lows.length; i++) {
+                    if (i === 0) ctx.moveTo(xPos(i), yPos(lows[i]));
+                    else ctx.lineTo(xPos(i), yPos(lows[i]));
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // ── Draw dots + labels ──
+            for (let i = 0; i < horizons.length; i++) {
+                const x = xPos(i);
+                const m = forecast[horizons[i]]?.median;
+                if (m != null) {
+                    ctx.beginPath();
+                    ctx.arc(x, yPos(m), 5, 0, Math.PI * 2);
+                    ctx.fillStyle = '#2d5016';
+                    ctx.fill();
+                    ctx.fillStyle = '#333';
+                    ctx.font = '11px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('₹' + m.toFixed(0), x, yPos(m) - 10);
+                }
+            }
+
+            // ── X-axis labels ──
+            ctx.fillStyle = '#666';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            for (let i = 0; i < horizons.length; i++) {
+                ctx.fillText(horizons[i], xPos(i), H - pad.bottom + 20);
+            }
+
+            // ── Y-axis ──
+            ctx.fillStyle = '#999';
+            ctx.font = '11px sans-serif';
+            ctx.textAlign = 'right';
+            const nTicks = 5;
+            for (let t = 0; t <= nTicks; t++) {
+                const val = minVal + (range * t / nTicks);
+                const y = yPos(val);
+                ctx.fillText('₹' + val.toFixed(0), pad.left - 8, y + 4);
+                // Grid line
+                ctx.beginPath();
+                ctx.strokeStyle = '#f0f0f0';
+                ctx.lineWidth = 1;
+                ctx.moveTo(pad.left, y);
+                ctx.lineTo(W - pad.right, y);
+                ctx.stroke();
+            }
+
+            // ── Legend ──
+            ctx.font = '11px sans-serif';
+            const legendY = 14;
+            const legendX = pad.left;
+            // High
+            ctx.strokeStyle = '#4caf50';
+            ctx.setLineDash([5, 3]);
+            ctx.beginPath();
+            ctx.moveTo(legendX, legendY);
+            ctx.lineTo(legendX + 20, legendY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#666';
+            ctx.textAlign = 'left';
+            ctx.fillText('High (q90)', legendX + 24, legendY + 4);
+            // Median
+            ctx.strokeStyle = '#2d5016';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(legendX + 90, legendY);
+            ctx.lineTo(legendX + 110, legendY);
+            ctx.stroke();
+            ctx.fillText('Median (q50)', legendX + 114, legendY + 4);
+            // Low
+            ctx.strokeStyle = '#f44336';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 3]);
+            ctx.beginPath();
+            ctx.moveTo(legendX + 190, legendY);
+            ctx.lineTo(legendX + 210, legendY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillText('Low (q10)', legendX + 214, legendY + 4);
+        }
+
+        // ── Form submission ────────────────────────────────────────────
+        document.getElementById('predictForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const btn = document.getElementById('submitBtn');
+            const errorBox = document.getElementById('errorBox');
+            const resultsDiv = document.getElementById('results');
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Predicting...';
+            errorBox.style.display = 'none';
+            resultsDiv.style.display = 'none';
+
+            const body = {};
+            const fields = ['commodity', 'state', 'district', 'market', 'quantity_kg', 'warehouse_grade', 'requested_loan_amount'];
+            for (const f of fields) {
+                const el = document.getElementById(f);
+                const val = el.value.trim();
+                if (val) {
+                    body[f] = f === 'quantity_kg' || f === 'requested_loan_amount' ? parseFloat(val) : val;
+                }
+            }
+
+            try {
+                const resp = await fetch('/api/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    errorBox.textContent = data.error || `Request failed (${resp.status})`;
+                    errorBox.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = '🔍 Get Prediction';
+                    return;
+                }
+
+                // ── Populate results ──
+                const riskEl = document.getElementById('riskScore');
+                riskEl.textContent = data.risk_score.toFixed(3);
+                riskEl.style.color = data.risk_score < 0.35 ? '#2d8a4e' : data.risk_score < 0.60 ? '#d4a017' : '#c0392b';
+
+                const decEl = document.getElementById('decision');
+                decEl.innerHTML = `<span class="badge ${data.decision.toLowerCase()}">${data.decision}</span>`;
+
+                document.getElementById('ltvValue').textContent = data.recommended_ltv_pct + '%';
+
+                if (data.recommended_loan_amount != null) {
+                    document.getElementById('maxLoan').textContent = '₹' + data.recommended_loan_amount.toLocaleString();
+                } else {
+                    document.getElementById('maxLoan').textContent = '—';
+                }
+
+                // Resolution info
+                const resInfo = document.getElementById('resolutionInfo');
+                if (data.resolution_type && data.resolution_type !== 'exact_match') {
+                    resInfo.textContent = `ℹ️ Location resolved via ${data.resolution_type.replace(/_/g, ' ')}: ${data.mandi_id}`;
+                    resInfo.style.display = 'block';
+                } else {
+                    resInfo.style.display = 'none';
+                }
+
+                // Forecast chart
+                if (data.forecast && Object.keys(data.forecast).length > 0) {
+                    drawForecastChart('forecastChart', data.forecast);
+                }
+
+                // Explanation table
+                const tbody = document.querySelector('#explanationTable tbody');
+                tbody.innerHTML = '';
+                if (data.explanation && data.explanation.components) {
+                    const comp = data.explanation.components;
+                    const rows = [
+                        ['Price CV (volatility)', comp.price_cv?.toFixed(4)],
+                        ['Forecast Uncertainty', comp.forecast_uncertainty?.toFixed(4)],
+                        ['Warehouse Count', comp.n_warehouses],
+                        ['Commodity Risk Tier', comp.commodity_tier?.toFixed(2)],
+                        ['Season', comp.season],
+                    ];
+                    for (const [label, value] of rows) {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `<td>${label}</td><td><strong>${value ?? '—'}</strong></td>`;
+                        tbody.appendChild(tr);
+                    }
+                    // Add thresholds
+                    if (data.explanation.thresholds) {
+                        const th = data.explanation.thresholds;
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `<td style="color:#999" colspan="2" style="font-size:11px">Thresholds: APPROVE &lt; ${th.approve}, CONDITIONAL &lt; ${th.conditional}, REJECT ≥ ${th.conditional}</td>`;
+                        tbody.appendChild(tr);
+                    }
+                }
+
+                // Forecast method
+                if (data.forecast_method) {
+                    const tr = document.createElement('tr');
+                    const methodLabel = data.forecast_method === 'quantile_gbm' ? 'ML Forecast (Quantile GBM)' : 'Statistical Fallback';
+                    tr.innerHTML = `<td>Forecast Method</td><td><em>${methodLabel}</em></td>`;
+                    tbody.appendChild(tr);
+                }
+
+                resultsDiv.style.display = 'block';
+
+            } catch (err) {
+                errorBox.textContent = 'Network error: ' + err.message;
+                errorBox.style.display = 'block';
+            }
+
+            btn.disabled = false;
+            btn.textContent = '🔍 Get Prediction';
+        });
+
+        // ── Redraw chart on window resize ──────────────────────────────
+        let lastForecast = null;
+        const origDraw = drawForecastChart;
+        // We'll store the last forecast data to redraw
+        const _origSubmit = document.getElementById('predictForm').onsubmit;
+        // Patch: store forecast on successful render
+        const observer = new MutationObserver(() => {
+            const chart = document.getElementById('forecastChart');
+            if (chart && chart.dataset.forecast) {
+                try { drawForecastChart('forecastChart', JSON.parse(chart.dataset.forecast)); } catch(e) {}
+            }
+        });
+    </script>
+</body>
+</html>

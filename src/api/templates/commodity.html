@@ -45,7 +45,11 @@
 </head>
 <body>
     <div class="header">
-        <a href="/">← Back to Dashboard</a>
+        <nav style="margin-bottom: 8px;">
+            <a href="/" style="color: white; text-decoration: none; margin-right: 16px; opacity: 0.85;">Dashboard</a>
+            <a href="/predict" style="color: white; text-decoration: none; margin-right: 16px; opacity: 0.85;">Predict LTV</a>
+            <a href="/commodity/{{ stats.commodity|lower|replace(' ', '-') }}" style="color: white; text-decoration: none; font-weight: 600;">{{ stats.commodity }}</a>
+        </nav>
         <h1>🌾 {{ stats.commodity }}</h1>
         <p>{{ stats.total }} mandi×commodity pairs across {{ stats.categories|join(', ') }}</p>
     </div>
