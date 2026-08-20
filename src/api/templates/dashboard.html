@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgriVault — Decision Support Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
+        .header { background: linear-gradient(135deg, #2d5016 0%, #4a7c23 100%); color: white; padding: 24px 32px; }
+        .header h1 { font-size: 28px; margin-bottom: 4px; }
+        .header p { opacity: 0.85; font-size: 14px; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+        /* KPI Cards */
+        .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .kpi-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .kpi-card .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+        .kpi-card .value { font-size: 32px; font-weight: 700; margin-top: 4px; }
+        .kpi-card .sub { font-size: 13px; color: #666; margin-top: 4px; }
+        .kpi-card.approve .value { color: #2d8a4e; }
+        .kpi-card.conditional .value { color: #d4a017; }
+        .kpi-card.reject .value { color: #c0392b; }
+
+        /* Sections */
+        .section { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 24px; }
+        .section h2 { font-size: 18px; margin-bottom: 16px; color: #2d5016; }
+
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #e0e0e0; color: #666; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; }
+        tr:hover { background: #f9fbf7; }
+        a { color: #2d5016; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* Decision badges */
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .badge.approve { background: #e8f5e9; color: #2d8a4e; }
+        .badge.conditional { background: #fff8e1; color: #b8860b; }
+        .badge.reject { background: #fce4ec; color: #c0392b; }
+
+        /* Decision bars */
+        .decision-bar { display: flex; height: 24px; border-radius: 4px; overflow: hidden; margin-top: 8px; }
+        .decision-bar .seg { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: white; }
+        .decision-bar .seg.approve { background: #4caf50; }
+        .decision-bar .seg.conditional { background: #ffc107; color: #333; }
+        .decision-bar .seg.reject { background: #f44336; }
+
+        /* Risk meter */
+        .risk-meter { width: 100%; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+        .risk-meter .fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+
+        /* Grid layout */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+
+        /* Search */
+        .search-box { width: 100%; padding: 10px 16px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; margin-bottom: 16px; }
+        .search-box:focus { outline: none; border-color: #4a7c23; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌾 AgriVault — Decision Support</h1>
+        <p>Agricultural commodity risk scoring and lending decisions | {{ total|int }} mandi×commodity pairs scored</p>
+    </div>
+
+    <div class="container">
+        <!-- KPI Cards -->
+        <div class="kpi-row">
+            <div class="kpi-card">
+                <div class="label">Total Scored</div>
+                <div class="value">{{ "{:,}".format(total) }}</div>
+                <div class="sub">mandi × commodity pairs</div>
+            </div>
+            <div class="kpi-card approve">
+                <div class="label">APPROVE</div>
+                <div class="value">{{ decisions.get('APPROVE', 0) }}</div>
+                <div class="sub">{{ "%.1f"|format(decisions.get('APPROVE', 0) / total * 100) }}% of total</div>
+            </div>
+            <div class="kpi-card conditional">
+                <div class="label">CONDITIONAL</div>
+                <div class="value">{{ decisions.get('CONDITIONAL', 0) }}</div>
+                <div class="sub">{{ "%.1f"|format(decisions.get('CONDITIONAL', 0) / total * 100) }}% of total</div>
+            </div>
+            <div class="kpi-card reject">
+                <div class="label">REJECT</div>
+                <div class="value">{{ decisions.get('REJECT', 0) }}</div>
+                <div class="sub">{{ "%.1f"|format(decisions.get('REJECT', 0) / total * 100) }}% of total</div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">Avg Risk Score</div>
+                <div class="value">{{ avg_risk }}</div>
+                <div class="sub">scale 0 (safe) → 1 (risky)</div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">Avg Recommended LTV</div>
+                <div class="value">{{ avg_ltv }}%</div>
+                <div class="sub">loan-to-value ratio</div>
+            </div>
+        </div>
+
+        <!-- Overall Decision Distribution -->
+        <div class="section">
+            <h2>Decision Distribution</h2>
+            <div class="decision-bar">
+                {% set total_dec = decisions.get('APPROVE', 0) + decisions.get('CONDITIONAL', 0) + decisions.get('REJECT', 0) %}
+                {% if total_dec > 0 %}
+                <div class="seg approve" style="width: {{ decisions.get('APPROVE', 0) / total_dec * 100 }}%">
+                    APPROVE {{ "%.0f"|format(decisions.get('APPROVE', 0) / total_dec * 100) }}%
+                </div>
+                <div class="seg conditional" style="width: {{ decisions.get('CONDITIONAL', 0) / total_dec * 100 }}%">
+                    CONDITIONAL {{ "%.0f"|format(decisions.get('CONDITIONAL', 0) / total_dec * 100) }}%
+                </div>
+                <div class="seg reject" style="width: {{ decisions.get('REJECT', 0) / total_dec * 100 }}%">
+                    REJECT {{ "%.0f"|format(decisions.get('REJECT', 0) / total_dec * 100) }}%
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <!-- Top Commodities -->
+            <div class="section">
+                <h2>Top Commodities by Volume</h2>
+                <input type="text" class="search-box" id="commoditySearch" placeholder="Search commodities...">
+                <table id="commodityTable">
+                    <thead>
+                        <tr>
+                            <th>Commodity</th>
+                            <th>Count</th>
+                            <th>Avg Risk</th>
+                            <th>Avg LTV</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in top_commodities %}
+                        <tr>
+                            <td><a href="/commodity/{{ c.commodity|lower|replace(' ', '-') }}">{{ c.commodity }}</a></td>
+                            <td>{{ c.count }}</td>
+                            <td>
+                                <div class="risk-meter">
+                                    <div class="fill" style="width: {{ (c.avg_risk * 100)|int }}%; background: {% if c.avg_risk < 0.35 %}#4caf50{% elif c.avg_risk < 0.60 %}#ffc107{% else %}#f44336{% endif %}"></div>
+                                </div>
+                                {{ c.avg_risk }}
+                            </td>
+                            <td>{{ c.avg_ltv }}%</td>
+                            <td><a href="/commodity/{{ c.commodity|lower|replace(' ', '-') }}">View →</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Risk by Category -->
+            <div class="section">
+                <h2>Risk by Commodity Category</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Count</th>
+                            <th>Avg Risk</th>
+                            <th>Risk Level</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in cat_risk %}
+                        <tr>
+                            <td>{{ c.commodity_category }}</td>
+                            <td>{{ c.count }}</td>
+                            <td>{{ c.avg_risk }}</td>
+                            <td>
+                                {% if c.avg_risk < 0.35 %}
+                                    <span class="badge approve">LOW</span>
+                                {% elif c.avg_risk < 0.60 %}
+                                    <span class="badge conditional">MEDIUM</span>
+                                {% else %}
+                                    <span class="badge reject">HIGH</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- State Summary -->
+        <div class="section">
+            <h2>State-Level Summary (Top 15)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>State</th>
+                        <th>Count</th>
+                        <th>Avg Risk</th>
+                        <th>Approve Rate</th>
+                        <th>Risk Meter</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in state_summary %}
+                    <tr>
+                        <td>{{ s.state }}</td>
+                        <td>{{ s.count }}</td>
+                        <td>{{ s.avg_risk }}</td>
+                        <td>{{ s.approve_pct }}%</td>
+                        <td style="width: 30%">
+                            <div class="risk-meter">
+                                <div class="fill" style="width: {{ (s.avg_risk * 100)|int }}%; background: {% if s.avg_risk < 0.35 %}#4caf50{% elif s.avg_risk < 0.60 %}#ffc107{% else %}#f44336{% endif %}"></div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- API Reference -->
+        <div class="section">
+            <h2>API Reference</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Endpoint</th>
+                        <th>Description</th>
+                        <th>Example</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>GET /api/summary</code></td>
+                        <td>Overall statistics</td>
+                        <td><a href="/api/summary">Try it →</a></td>
+                    </tr>
+                    <tr>
+                        <td><code>GET /api/commodities</code></td>
+                        <td>List all commodities with stats</td>
+                        <td><a href="/api/commodities">Try it →</a></td>
+                    </tr>
+                    <tr>
+                        <td><code>GET /api/scores?commodity=WHEAT</code></td>
+                        <td>Risk scores (filterable)</td>
+                        <td><a href="/api/scores?commodity=WHEAT&limit=5">Try it →</a></td>
+                    </tr>
+                    <tr>
+                        <td><code>GET /api/scores/WHEAT</code></td>
+                        <td>Scores for one commodity</td>
+                        <td><a href="/api/scores/WHEAT">Try it →</a></td>
+                    </tr>
+                    <tr>
+                        <td><code>GET /api/decisions</code></td>
+                        <td>Decision distribution by commodity</td>
+                        <td><a href="/api/decisions">Try it →</a></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Commodity search filter
+        document.getElementById('commoditySearch').addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            const rows = document.querySelectorAll('#commodityTable tbody tr');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        });
+    </script>
+</body>
+</html>

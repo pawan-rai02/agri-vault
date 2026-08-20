@@ -1,0 +1,64 @@
+# =============================================================================
+# AgriVault – Docker Ignore
+# =============================================================================
+# Keep the build context small and avoid leaking secrets / large files.
+# =============================================================================
+
+# ── Git ──────────────────────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Data (large, mounted as volumes or fetched from S3 at runtime) ──────────
+data/
+
+# ── Python artifacts ────────────────────────────────────────────────────────
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+dist
+build
+.eggs
+
+# ── IDE / Editor ────────────────────────────────────────────────────────────
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# ── Jupyter Notebooks (outputs & checkpoints) ──────────────────────────────
+.ipynb_checkpoints
+notebooks/
+
+# ── Logs & Reports ──────────────────────────────────────────────────────────
+logs/
+*.log
+*.out
+reports/
+
+# ── Secrets ─────────────────────────────────────────────────────────────────
+.env
+.env.*
+*.pem
+*.key
+
+# ── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Docker (prevent recursive builds) ───────────────────────────────────────
+Dockerfile
+docker-compose.yml
+docker-compose*.yml
+
+# ── Test / CI cache ─────────────────────────────────────────────────────────
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# ── Models (fetched from S3 at runtime) ────────────────────────────────────
+models/
+*.pkl
+*.pt
+*.onnx

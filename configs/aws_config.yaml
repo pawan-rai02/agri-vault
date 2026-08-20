@@ -1,0 +1,24 @@
+# =============================================================================
+# AgriVault – AWS S3 Configuration
+# =============================================================================
+# Credentials are NOT stored here.
+# They are read from ~/.aws/credentials under the named profile below.
+# Run: aws configure --profile agrivault
+# =============================================================================
+
+aws:
+  profile: agrivault          # Named profile in ~/.aws/credentials
+  region: ap-south-1          # Mumbai – closest to Indian mandi data
+
+s3:
+  bucket: agrivault-lake-pawan
+
+  # Prefix layout mirrors the Bronze → Silver → Gold pipeline
+  prefixes:
+    raw:          raw/
+    standardized: standardized/
+    features:     features/
+    reference:    reference/
+
+  # Optional: server-side encryption
+  sse: AES256

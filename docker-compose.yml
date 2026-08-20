@@ -1,0 +1,88 @@
+# =============================================================================
+# AgriVault – Docker Compose
+# =============================================================================
+# Services
+#   web      – Flask API + dashboard (Gunicorn on port 8000)
+#   pipeline – One-shot container for running data pipeline commands
+#
+# Quick start
+# -----------
+#   1. Copy .env.example → .env and fill in your values
+#   2. docker compose up --build            # start the API
+#   3. docker compose run pipeline <cmd>    # run a pipeline step
+#
+# Pipeline commands
+# -----------------
+#   docker compose run pipeline python -m src.standardization.clean_apmc
+#   docker compose run pipeline python -m src.standardization.clean_weather
+#   docker compose run pipeline python -m src.standardization.clean_ndvi
+#   docker compose run pipeline python -m src.standardization.clean_wdra
+#   docker compose run pipeline python -m src.standardization.clean_wpi_cpi
+#   docker compose run pipeline python -m src.standardization.clean_loans
+#   docker compose run pipeline python -m src.features.build_price_features
+#   docker compose run pipeline python -m src.features.build_risk_features
+#   docker compose run pipeline python -m src.models.quantile_gbm.train --top-n 5 --quick
+#   docker compose run pipeline python -m src.models.risk_ltv_model
+#
+# Production
+# ----------
+#   Deploy only the "web" service behind a load balancer / reverse proxy.
+#   Pipeline runs are triggered manually or via CI/CD.
+# =============================================================================
+
+services:
+  # ── API / Dashboard ──────────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agrivault-web
+    ports:
+      - "${AGRIVAULT_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      - AGRIVAULT_HOST=0.0.0.0
+      - AGRIVAULT_PORT=8000
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+
+  # ── Pipeline (one-shot) ─────────────────────────────────────────────────
+  # Usage: docker compose run pipeline <command>
+  # Runs a single pipeline step and exits.
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agrivault-pipeline
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      # Give PySpark more room for standardization jobs
+      - SPARK_DRIVER_MEMORY=4g
+    volumes:
+      # Mount AWS credentials if not using env vars
+      - ~/.aws:/home/agrivault/.aws:ro
+    # Override CMD with the pipeline command
+    entrypoint: ["python"]
+    command: ["-c", "import sys; print('Usage: docker compose run pipeline python -m <module>')"]
+    profiles: ["pipeline"]
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G

@@ -1,0 +1,14 @@
+﻿project_id: "silver-aurora-416511"
+
+dataset: "COPERNICUS/S2_SR_HARMONIZED"
+
+start_date: "2025-01-01"
+end_date: "2026-01-01"
+
+cloud_percentage: 30
+
+buffer_meters: 500
+
+scale_meters: 10
+
+output_dir: "data/raw/ndvi"

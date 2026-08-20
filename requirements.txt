@@ -1,0 +1,29 @@
+# =============================================================================
+# AgriVault – Python Dependencies
+# =============================================================================
+# Core data & ML
+numpy>=1.24,<2.0
+pandas>=2.0,<3.0
+pyarrow>=14.0,<18.0
+pyyaml>=6.0,<7.0
+
+# Cloud
+boto3>=1.34,<2.0
+
+# Web API
+flask>=3.0,<4.0
+gunicorn>=22.0,<23.0
+python-dotenv>=1.0,<2.0
+
+# PySpark (Silver layer standardization)
+pyspark>=3.5,<4.0
+
+# Google Earth Engine (NDVI ingestion)
+earthengine-api>=1.1,<2.0
+
+# Excel support (CPI/WPI cleaning)
+openpyxl>=3.1,<4.0
+
+# Dev / Test
+pytest>=8.0,<9.0
+tqdm>=4.66,<5.0

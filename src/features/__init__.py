@@ -1,0 +1,1 @@
+"""AgriVault – src/features package."""
