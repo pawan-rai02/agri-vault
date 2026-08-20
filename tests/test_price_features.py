@@ -38,75 +38,8 @@ from src.features.build_price_features import (
 )
 from src.features.build_risk_features import map_commodity_category
 
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-@pytest.fixture
-def simple_apmc() -> pd.DataFrame:
-    """3 mandis × 1 commodity × 10 days of price data."""
-    dates = pd.date_range("2025-01-01", periods=10, freq="D")
-    rows = []
-    for mandi in ["M_A", "M_B", "M_C"]:
-        for i, d in enumerate(dates):
-            rows.append({
-                "mandi_id": mandi,
-                "commodity": "WHEAT",
-                "date": d,
-                "modal_price": 100.0 + i * 2 + hash(mandi) % 5,
-                "arrivals_tonnes": 10.0 + i,
-                "latitude": 18.5,
-                "longitude": 73.8,
-                "state": "MAHARASHTRA",
-                "district": "PUNE",
-            })
-    return pd.DataFrame(rows)
-
-
-@pytest.fixture
-def simple_weather() -> pd.DataFrame:
-    """Matching weather data for the same 10 days, rounded lat/lon."""
-    dates = pd.date_range("2025-01-01", periods=10, freq="D")
-    rows = []
-    for d in dates:
-        rows.append({
-            "date": d,
-            "lat2": 18.50,
-            "lon2": 73.80,
-            "temperature_mean": 25.0,
-            "precipitation_mm": 2.0,
-            "humidity": 60.0,
-            "wind_speed": 5.0,
-        })
-    return pd.DataFrame(rows)
-
-
-@pytest.fixture
-def simple_ndvi() -> pd.DataFrame:
-    """NDVI values for M_A only (to test left-join behavior)."""
-    dates = pd.date_range("2025-01-01", periods=10, freq="D")
-    rows = [{"mandi_id": "M_A", "date": d, "ndvi": 0.3 + 0.01 * i}
-            for i, d in enumerate(dates)]
-    return pd.DataFrame(rows)
-
-
-@pytest.fixture
-def simple_cpi() -> pd.DataFrame:
-    return pd.DataFrame({
-        "year": [2025] * 3,
-        "month": [1, 2, 3],
-        "food_cpi_index": [120.0, 121.0, 122.0],
-    })
-
-
-@pytest.fixture
-def simple_wpi() -> pd.DataFrame:
-    return pd.DataFrame({
-        "year": [2025] * 3,
-        "month": [1, 2, 3],
-        "food_wpi_index": [110.0, 111.0, 112.0],
-    })
+# Note: simple_apmc, simple_weather, simple_ndvi, simple_cpi, simple_wpi
+# fixtures are defined in tests/conftest.py and shared across test files.
 
 
 # ---------------------------------------------------------------------------

@@ -26,25 +26,8 @@ from pyspark.sql.types import (
 
 from src.standardization.clean_ndvi import clean_ndvi_base, forward_fill_to_daily
 
-
-# ---------------------------------------------------------------------------
-# Shared Spark session (session-scoped fixture)
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(scope="session")
-def spark():
-    session = (
-        SparkSession.builder
-        .appName("test-ndvi")
-        .master("local[2]")
-        .config("spark.sql.ansi.enabled", "false")
-        .config("spark.sql.shuffle.partitions", "2")
-        .config("spark.driver.memory", "1g")
-        .getOrCreate()
-    )
-    session.sparkContext.setLogLevel("ERROR")
-    yield session
-    session.stop()
+# Note: the `spark` fixture is defined in tests/conftest.py (session-scoped)
+# and shared across all PySpark tests.
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +146,9 @@ class TestForwardFillToDaily:
 
     def _base_cleaned(self, spark: SparkSession) -> object:
         """Two mandis with monthly observations — January and March 2025."""
-        from pyspark.sql.types import DateType, LongType
+        from pyspark.sql.types import (
+            DateType, DoubleType, LongType, StringType, StructField, StructType,
+        )
 
         rows = [
             ("MAHARASHTRA_PUNE_100_PUNE",     100, "PUNE",     "PUNE",     "MAHARASHTRA",
@@ -181,7 +166,7 @@ class TestForwardFillToDaily:
             StructField("state",       StringType(), True),
             StructField("latitude",    DoubleType(), True),
             StructField("longitude",   DoubleType(), True),
-            StructField("date",        "date",       True),
+            StructField("date",        DateType(),   True),
             StructField("ndvi",        DoubleType(), True),
         ])
         # Workaround: create from pandas for clean date handling
