@@ -149,12 +149,36 @@ def resolve_mandi(
         return state_candidates.iloc[0]["mandi_id"], "state_fallback"
 
     # ── 4. Not found ─────────────────────────────────────────────────────
-    return None, "not_found"
-
-
-# ---------------------------------------------------------------------------
+    return None, "not_found"# ---------------------------------------------------------------------------
 # Geo fallback
 # ---------------------------------------------------------------------------
+def resolve_mandi_by_coords(
+    latitude: float,
+    longitude: float,
+    top_n: int = 1,
+) -> pd.DataFrame:
+    """Find the nearest mandi(s) to the given coordinates.
+
+    Parameters
+    ----------
+    latitude, longitude : float
+        Reference point (e.g. the user's GPS location).
+    top_n : int
+        Number of nearest mandis to return.
+
+    Returns
+    -------
+    pd.DataFrame
+        Top-N mandis sorted by distance, with an added 'distance_km' column.
+    """
+    df = _load_mandi_locs()
+    df = df.copy()
+    df["distance_km"] = df.apply(
+        lambda row: haversine_km(latitude, longitude, row["latitude"], row["longitude"]),
+        axis=1,
+    )
+    return df.sort_values("distance_km").head(top_n)
+
 
 def nearest_mandi_with_data(
     lat: float,

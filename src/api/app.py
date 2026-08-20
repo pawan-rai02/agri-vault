@@ -36,6 +36,8 @@ from flask import Flask, jsonify, render_template, request
 from src.api.predict import predict_bp
 from src.features.build_serving_snapshot import load_snapshot
 from src.serving.model_registry import load_all_models, loaded_model_count
+import botocore.exceptions
+
 from src.storage.s3_client import S3Client
 
 # Load .env file if present (for local development)
@@ -100,10 +102,11 @@ def _load_serving_snapshot() -> pd.DataFrame:
             "Loaded serving snapshot: %d rows, %d cols",
             len(_serving_snapshot), len(_serving_snapshot.columns),
         )
-    except FileNotFoundError:
+    except (FileNotFoundError, botocore.exceptions.ClientError) as exc:
         log.warning(
             "Serving snapshot not found on S3 — live predictions will be "
-            "unavailable until build_serving_snapshot.py is run."
+            "unavailable until build_serving_snapshot.py is run. (%s)",
+            exc,
         )
         _serving_snapshot = pd.DataFrame()
 
@@ -119,6 +122,92 @@ def _load_serving_snapshot() -> pd.DataFrame:
 def predict_page():
     """Prediction form page."""
     return render_template("predict.html")
+
+
+# Mandi search index — loaded once at startup
+_mandi_search_df: pd.DataFrame | None = None
+
+
+def _load_mandi_search():
+    """Load mandi locations for search autocomplete."""
+    global _mandi_search_df
+    if _mandi_search_df is not None:
+        return _mandi_search_df
+    try:
+        _mandi_search_df = pd.read_csv(
+            Path(__file__).parent.parent.parent / "data" / "reference" / "mandi_locations.csv"
+        )
+        log.info("Loaded mandi search index: %d rows", len(_mandi_search_df))
+    except Exception as exc:
+        log.warning("Could not load mandi locations: %s", exc)
+        _mandi_search_df = pd.DataFrame()
+    return _mandi_search_df
+
+
+@app.route("/api/search-states")
+def search_states():
+    """Search unique states by prefix.
+
+    Query params:
+        q     : search term (min 1 char)
+        limit : max results (default 10)
+    """
+    query = request.args.get("q", "").strip().upper()
+    limit = min(int(request.args.get("limit", 10)), 30)
+
+    if len(query) < 1:
+        return jsonify([])
+
+    df = _load_mandi_search()
+    if df.empty:
+        return jsonify([])
+
+    states = df["state"].dropna().unique()
+    matches = sorted([s for s in states if query in s.upper()])
+    return jsonify(matches[:limit])
+
+
+@app.route("/api/search-mandi")
+def search_mandi():
+    """Search mandis by name, district, or state.
+
+    Query params:
+        q     : search term (min 1 char)
+        state : optional state filter
+        limit : max results (default 15)
+    """
+    query = request.args.get("q", "").strip()
+    state_filter = request.args.get("state", "").strip().upper()
+    limit = min(int(request.args.get("limit", 15)), 50)
+
+    if len(query) < 1:
+        return jsonify([])
+
+    df = _load_mandi_search()
+    if df.empty:
+        return jsonify([])
+
+    q = query.upper()
+    mask = (
+        df["mandi_name"].str.upper().str.contains(q, na=False)
+        | df["district"].str.upper().str.contains(q, na=False)
+    )
+    if state_filter:
+        mask = mask & (df["state"].str.upper() == state_filter)
+
+    results = df[mask].head(limit)
+
+    return jsonify([
+        {
+            "mandi_id": row["mandi_id"],
+            "mandi_name": row["mandi_name"],
+            "district": row["district"],
+            "state": row["state"],
+            "latitude": round(float(row["latitude"]), 4) if pd.notna(row["latitude"]) else None,
+            "longitude": round(float(row["longitude"]), 4) if pd.notna(row["longitude"]) else None,
+        }
+        for _, row in results.iterrows()
+    ])
 
 
 # ---------------------------------------------------------------------------

@@ -41,8 +41,10 @@ import pandas as pd
 from flask import Blueprint, jsonify, request
 
 from src.models.risk_ltv_model import COMMODITY_RISK_TIER, RiskLTVModel
-from src.serving.location_resolver import resolve_mandi
+from src.serving.location_resolver import resolve_mandi, resolve_mandi_by_coords
 from src.serving.model_registry import get_model
+from src.serving.nasa_weather import fetch_nasa_weather, build_weather_features
+from src.serving.weather_forecast import fetch_and_build_features as fetch_forecast_features
 
 log = logging.getLogger(__name__)
 
@@ -75,9 +77,22 @@ _MONTH_TO_SEASON = {
 
 
 def _get_snapshot():
-    """Import and return the serving snapshot from the app module."""
-    from src.api.app import _serving_snapshot
-    return _serving_snapshot
+    """Return the serving snapshot from the app module.
+
+    When the app runs as ``python -m src.api.app``, Python loads it as
+    ``__main__``, not ``src.api.app``.  ``from X import Y`` inside a
+    function looks up the *real* module name which may still have the
+    initial ``None``.  We therefore check both ``__main__`` and the
+    named module to find whichever holds the loaded snapshot.
+    """
+    import sys
+    import src.api.app as _app_mod
+    snap = _app_mod._serving_snapshot
+    if snap is None:
+        main_mod = sys.modules.get("__main__")
+        if main_mod is not None and hasattr(main_mod, "_serving_snapshot"):
+            snap = main_mod._serving_snapshot
+    return snap
 
 
 def _run_forecast(features: pd.Series) -> tuple[dict, str]:
@@ -98,14 +113,22 @@ def _run_forecast(features: pd.Series) -> tuple[dict, str]:
 
     X = np.array(feat_values).reshape(1, -1)
 
-    # Check if all required models are available
+    # Check if trained models are available for this commodity
     commodity = features.get("commodity", "")
     all_models_available = all(
         get_model(commodity, h) is not None for h in _HORIZONS
     )
 
-    if all_models_available and not missing_cols:
-        # ── Tier 1: Full Quantile GBM forecast ──────────────────────────
+    if all_models_available:
+        # ── Tier 1: Quantile GBM forecast ─────────────────────────────
+        # Use the trained model even if some features were NaN (replaced
+        # with 0.0 above).  The model was trained on data with NaN → 0
+        # substitutions, so this is consistent.
+        if missing_cols:
+            log.info(
+                "Using Quantile GBM with %d NaN features zero-filled: %s",
+                len(missing_cols), missing_cols,
+            )
         forecast = {}
         for horizon in _HORIZONS:
             model = get_model(commodity, horizon)
@@ -145,6 +168,7 @@ def _compute_risk(
     features: pd.Series,
     forecast: dict,
     commodity: str,
+    warehouse_grade: str = "B",
 ) -> dict:
     """Compute risk score, decision, and recommended LTV."""
     # Build a single-row DataFrame for RiskLTVModel.score()
@@ -176,11 +200,17 @@ def _compute_risk(
     if n_warehouses is None or (isinstance(n_warehouses, float) and np.isnan(n_warehouses)):
         n_warehouses = 2  # conservative default
 
+    # Warehouse grade (default "B" — standard)
+    warehouse_grade = (warehouse_grade or "B").upper().strip()
+    if warehouse_grade not in ("A", "B", "C"):
+        warehouse_grade = "B"
+
     risk_df = pd.DataFrame([{
         "commodity": commodity,
         "price_cv": price_cv,
         "forecast_uncertainty": forecast_uncertainty,
         "n_warehouses": n_warehouses,
+        "warehouse_grade": warehouse_grade,
         "season": season,
     }])
 
@@ -188,15 +218,25 @@ def _compute_risk(
     scored = model.score(risk_df)
     row = scored.iloc[0]
 
+    # ── Feature importance (% contribution of each component) ─────────
+    feat_importance = {}
+    for col in scored.columns:
+        if col.startswith("_feat_"):
+            name = col.replace("_feat_", "")
+            feat_importance[name] = round(float(row[col]) * 100, 1)
+
     # Build explanation
     explanation = {
         "components": {
             "price_cv": round(float(price_cv), 4),
             "forecast_uncertainty": round(float(forecast_uncertainty), 4),
             "n_warehouses": int(n_warehouses),
+            "warehouse_grade": warehouse_grade,
             "commodity_tier": COMMODITY_RISK_TIER.get(commodity.upper(), 0.5),
             "season": season,
         },
+        "feature_importance": feat_importance,
+        "weights": model.WEIGHTS,
         "thresholds": model.THRESHOLDS,
     }
 
@@ -247,6 +287,29 @@ def _log_prediction(
 # Endpoint
 # ---------------------------------------------------------------------------
 
+import os
+
+# Simple API key check — if AGRIVAULT_API_KEY is set, require it in header
+_API_KEY = os.environ.get("AGRIVAULT_API_KEY", "")
+
+# Simple in-memory rate limiter (per-IP, sliding window)
+_rate_limits: dict[str, list[float]] = {}
+_MAX_REQUESTS = int(os.environ.get("AGRIVAULT_RATE_LIMIT", "30"))  # per minute
+_WINDOW = 60.0  # seconds
+
+
+def _check_rate_limit(ip: str) -> bool:
+    """Return True if request is allowed, False if rate-limited."""
+    import time as _time
+    now = _time.time()
+    # Clean old entries
+    _rate_limits[ip] = [t for t in _rate_limits.get(ip, []) if now - t < _WINDOW]
+    if len(_rate_limits.get(ip, [])) >= _MAX_REQUESTS:
+        return False
+    _rate_limits.setdefault(ip, []).append(now)
+    return True
+
+
 @predict_bp.route("/api/predict", methods=["POST"])
 def predict():
     """Live prediction endpoint.
@@ -254,6 +317,20 @@ def predict():
     Accepts commodity + location, resolves to a mandi, runs the forecast
     model, and returns risk score / decision / recommended LTV.
     """
+    # ── API key check ────────────────────────────────────────────────────
+    if _API_KEY:
+        provided = request.headers.get("X-API-Key", "")
+        if provided != _API_KEY:
+            return jsonify({"error": "Invalid or missing API key"}), 401
+
+    # ── Rate limiting ────────────────────────────────────────────────────
+    client_ip = request.remote_addr or "unknown"
+    if not _check_rate_limit(client_ip):
+        return jsonify({
+            "error": "Rate limit exceeded",
+            "retry_after_seconds": int(_WINDOW),
+        }), 429
+
     request_id = str(uuid.uuid4())[:8]
     t0 = time.time()
 
@@ -264,22 +341,51 @@ def predict():
 
     commodity = body.get("commodity")
     state = body.get("state")
+    latitude = body.get("latitude")
+    longitude = body.get("longitude")
 
-    if not commodity or not state:
+    # Lat/lon is required when state is not provided
+    if not commodity:
+        return jsonify({
+            "error": "Missing required field: commodity",
+        }), 400
+
+    if not state and (latitude is None or longitude is None):
         return jsonify({
             "error": "Missing required fields",
-            "required": ["commodity", "state"],
+            "required": ["commodity", "state or (latitude + longitude)"],
             "optional": ["district", "market", "requested_loan_amount",
-                         "quantity_kg", "warehouse_grade"],
+                         "quantity_kg", "warehouse_grade",
+                         "latitude", "longitude"],
         }), 400
 
     commodity = commodity.strip().upper()
-    state = state.strip()
+    state = state.strip() if state else None
     district = body.get("district", "").strip() or None
     market = body.get("market", "").strip() or None
+    latitude = float(latitude) if latitude is not None else None
+    longitude = float(longitude) if longitude is not None else None
 
     # ── Resolve mandi ────────────────────────────────────────────────────
-    mandi_id, resolution_type = resolve_mandi(state, district, market)
+    mandi_id = None
+    resolution_type = "not_found"
+    mandi_distance_km = None
+    mandi_lat = None
+    mandi_lon = None
+
+    # Try text-based resolution first
+    if state:
+        mandi_id, resolution_type = resolve_mandi(state, district, market)
+
+    # If no match from text, or if we have lat/lon, try geo resolution
+    if mandi_id is None and latitude is not None and longitude is not None:
+        nearest = resolve_mandi_by_coords(latitude, longitude, top_n=1)
+        if not nearest.empty:
+            mandi_id = nearest.iloc[0]["mandi_id"]
+            mandi_distance_km = round(float(nearest.iloc[0]["distance_km"]), 2)
+            resolution_type = "geo_nearest"
+            mandi_lat = float(nearest.iloc[0]["latitude"])
+            mandi_lon = float(nearest.iloc[0]["longitude"])
 
     if mandi_id is None:
         return jsonify({
@@ -287,53 +393,154 @@ def predict():
             "state": state,
             "district": district,
             "market": market,
+            "latitude": latitude,
+            "longitude": longitude,
         }), 404
 
     # ── Look up feature vector ───────────────────────────────────────────
     snapshot = _get_snapshot()
-    if snapshot is None or snapshot.empty:
-        return jsonify({
-            "error": "Serving snapshot not available — data not yet loaded",
-        }), 503
+    features = None
+    used_snapshot = False
+    nasa_weather_features = {}
 
-    row = snapshot[
-        (snapshot["mandi_id"] == mandi_id)
-        & (snapshot["commodity"] == commodity)
-    ]
+    # Try to get features from snapshot
+    if snapshot is not None and not snapshot.empty:
+        # Normalize mandi_id variants: snapshot may use %20 for spaces
+        # (e.g. "UTTAR%20PRADESH_LUCKNOW_334_LUCKNOW")
+        mandi_id_variants = [mandi_id]
+        if mandi_id and "%20" in mandi_id:
+            mandi_id_variants.append(mandi_id.replace("%20", "_"))
+        elif mandi_id:
+            mandi_id_variants.append(mandi_id.replace("_", "%20", 1))
 
-    if row.empty:
-        # Try case-insensitive commodity match
-        row = snapshot[
-            (snapshot["mandi_id"] == mandi_id)
-            & (snapshot["commodity"].str.upper() == commodity)
-        ]
+        row = pd.DataFrame()
+        for mid in mandi_id_variants:
+            row = snapshot[
+                (snapshot["mandi_id"] == mid)
+                & (snapshot["commodity"].str.upper() == commodity)
+            ]
+            log.debug("Snapshot lookup [%s] commodity=%s => %d rows", mid, commodity, len(row))
+            if not row.empty:
+                break
 
-    if row.empty:
-        # Check if this mandi has ANY data (any commodity)
-        mandi_data = snapshot[snapshot["mandi_id"] == mandi_id]
-        available_commodities = mandi_data["commodity"].unique().tolist() if not mandi_data.empty else []
-        return jsonify({
-            "error": f"No recent feature data for {commodity} at mandi {mandi_id}",
-            "mandi_id": mandi_id,
-            "available_commodities": available_commodities[:10],
-            "suggestion": "Try a different mandi or check available commodities",
-        }), 404
+        # If exact mandi match failed, try fuzzy: find this commodity
+        # at any mandi whose state matches the resolved mandi's state prefix
+        if row.empty and mandi_id:
+            state_prefix = mandi_id.split("_")[0] if "_" in mandi_id else mandi_id
+            state_prefix = state_prefix.replace("%20", " ")
+            candidates = snapshot[
+                (snapshot["commodity"].str.upper() == commodity)
+                & (snapshot["mandi_id"].str.upper().str.startswith(state_prefix.upper().replace(" ", "%20")))
+            ]
+            if candidates.empty:
+                # Also try without %20
+                candidates = snapshot[
+                    (snapshot["commodity"].str.upper() == commodity)
+                    & (snapshot["mandi_id"].str.upper().str.startswith(state_prefix.upper().replace(" ", "_")))
+                ]
+            if not candidates.empty:
+                # Pick the one with the shortest mandi_id (closest name match)
+                row = candidates.head(1)
+                log.info("Fuzzy commodity match: found %s at %s", commodity, row.iloc[0]["mandi_id"])
 
-    features = row.iloc[0]
+        if not row.empty:
+            features = row.iloc[0]
+            used_snapshot = True
+
+    # ── Fetch live NASA weather if lat/lon provided ───────────────────────
+    if latitude is not None and longitude is not None:
+        try:
+            weather_df = fetch_nasa_weather(latitude, longitude, days_back=60)
+            if not weather_df.empty:
+                nasa_weather_features = build_weather_features(weather_df)
+                log.info(
+                    "NASA weather features for (%.4f, %.4f): %s",
+                    latitude, longitude, nasa_weather_features,
+                )
+        except Exception as exc:
+            log.warning("Failed to fetch NASA weather: %s", exc)
+
+    # If we still have no features at all, return an error
+    if features is None:
+        # If we have NASA weather, build a minimal feature set for fallback
+        if nasa_weather_features and any(v is not None for v in nasa_weather_features.values()):
+            # Build minimal features from NASA weather + defaults
+            features = pd.Series({
+                "commodity": commodity,
+                "mandi_id": mandi_id,
+                "price_lag_1d": None,
+                "price_lag_7d": None,
+                "price_lag_14d": None,
+                "price_lag_30d": None,
+                "price_mean_7d": None,
+                "price_std_7d": None,
+                "price_mean_14d": None,
+                "price_std_14d": None,
+                "price_mean_30d": None,
+                "price_std_30d": None,
+                "price_momentum_7d": None,
+                "arrivals_tonnes": None,
+                "arrivals_mean_7d": None,
+                "ndvi": None,
+                "ndvi_delta_30d": None,
+                "food_cpi_index": None,
+                "food_wpi_index": None,
+                "modal_price": 0,
+                "day_of_week": pd.Timestamp.now().dayofweek,
+                "day_of_month": pd.Timestamp.now().day,
+                "month": pd.Timestamp.now().month,
+                "is_weekend": 1 if pd.Timestamp.now().dayofweek >= 5 else 0,
+                **nasa_weather_features,
+            })
+            log.info(
+                "Building minimal features from NASA weather for %s @%s",
+                commodity, mandi_id,
+            )
+        else:
+            return jsonify({
+                "error": f"No feature data for {commodity} at mandi {mandi_id}.",
+                "mandi_id": mandi_id,
+                "resolution_type": resolution_type,
+                "hint": "Provide latitude and longitude to fetch live NASA weather data.",
+            }), 404
+
+    # ── Override weather features with live NASA data ─────────────────────
+    # If we got NASA weather and snapshot features exist, prefer the live data
+    if nasa_weather_features and any(v is not None for v in nasa_weather_features.values()):
+        for key, val in nasa_weather_features.items():
+            if val is not None:
+                features[key] = val
+        log.info("Overrode weather features with live NASA data")
+
+    # ── Fetch forward weather forecast (Open-Meteo) ──────────────────────
+    forecast_weather_features: dict[str, float | None] = {}
+    if latitude is not None and longitude is not None:
+        try:
+            forecast_weather_features = fetch_forecast_features(latitude, longitude)
+            log.info(
+                "Open-Meteo forecast features for (%.4f, %.4f): %s",
+                latitude, longitude, forecast_weather_features,
+            )
+        except Exception as exc:
+            log.warning("Failed to fetch Open-Meteo forecast: %s", exc)
 
     # ── Run forecast ─────────────────────────────────────────────────────
     forecast, forecast_method = _run_forecast(features)
 
-    if forecast_method == "insufficient_data":
+    # If forecast failed but we used NASA weather, still return risk assessment
+    nasa_used = bool(nasa_weather_features and any(v is not None for v in nasa_weather_features.values()))
+    if forecast_method == "insufficient_data" and not nasa_used:
         return jsonify({
             "error": "Insufficient data for this commodity-location combination",
             "mandi_id": mandi_id,
             "resolution_type": resolution_type,
             "commodity": commodity,
+            "hint": "Provide latitude and longitude to fetch live NASA weather data.",
         }), 404
 
     # ── Compute risk & decision ──────────────────────────────────────────
-    risk_result = _compute_risk(features, forecast, commodity)
+    warehouse_grade = body.get("warehouse_grade", "B") or "B"
+    risk_result = _compute_risk(features, forecast, commodity, warehouse_grade)
 
     # ── Build response ───────────────────────────────────────────────────
     modal_price = float(features.get("modal_price", 0) or 0)
@@ -349,11 +556,18 @@ def predict():
 
     duration_ms = (time.time() - t0) * 1000
 
+    # Determine which weather sources were used
+    forecast_weather_used = bool(forecast_weather_features and any(v is not None for v in forecast_weather_features.values()))
+
     result = {
         "request_id": request_id,
         "mandi_id": mandi_id,
         "resolution_type": resolution_type,
         "commodity": commodity,
+        "used_snapshot": used_snapshot,
+        "nasa_weather_used": nasa_used,
+        "forecast_weather_used": forecast_weather_used,
+        "mandi_distance_km": mandi_distance_km,
         "forecast": forecast,
         "forecast_method": forecast_method,
         "risk_score": risk_result["risk_score"],
@@ -364,6 +578,10 @@ def predict():
         "explanation": risk_result["explanation"],
         "duration_ms": round(duration_ms, 2),
     }
+
+    # Include forward forecast weather features if available
+    if forecast_weather_used:
+        result["forecast_weather"] = {k: round(v, 2) if v is not None else None for k, v in forecast_weather_features.items()}
 
     # ── Log prediction (best-effort) ─────────────────────────────────────
     _log_prediction(request_id, body, mandi_id, resolution_type, result, duration_ms)

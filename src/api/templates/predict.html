@@ -59,6 +59,56 @@
         .explanation-table { width: 100%; font-size: 13px; }
         .explanation-table td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; }
         .explanation-table td:first-child { color: #666; font-weight: 500; }
+        .fi-badge {
+            display: inline-block;
+            background: #e8f5e9;
+            color: #2d5016;
+            border-radius: 10px;
+            padding: 1px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        .ac-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0; right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 220px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+        .ac-dropdown .ac-item {
+            padding: 9px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            border-bottom: 1px solid #f5f5f5;
+            transition: background 0.1s;
+        }
+        .ac-dropdown .ac-item:hover,
+        .ac-dropdown .ac-item.active {
+            background: #f0f7e6;
+        }
+        .ac-dropdown .ac-item .ac-main {
+            color: #333;
+            font-weight: 500;
+        }
+        .ac-dropdown .ac-item .ac-sub {
+            color: #999;
+            font-size: 11px;
+            margin-top: 2px;
+        }
+        .ac-dropdown .ac-empty {
+            padding: 10px 12px;
+            color: #999;
+            font-size: 13px;
+        }
     </style>
 </head>
 <body>
@@ -72,6 +122,7 @@
         <!-- Prediction Form -->
         <div class="section">
             <h2>Enter Details</h2>
+
             <form id="predictForm">
                 <div class="form-grid">
                     <div class="form-group">
@@ -79,18 +130,21 @@
                         <input type="text" id="commodity" name="commodity" placeholder="e.g. WHEAT" required>
                         <span class="hint">UPPERCASE preferred (e.g. WHEAT, TOMATO, ONION)</span>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" style="position: relative;">
                         <label for="state">State *</label>
-                        <input type="text" id="state" name="state" placeholder="e.g. MAHARASHTRA" required>
-                        <span class="hint">Full state name (case-insensitive)</span>
+                        <input type="text" id="state" name="state" placeholder="Type to search states..." required autocomplete="off">
+                        <div id="stateDropdown" class="ac-dropdown"></div>
+                        <span class="hint">Start typing to search (e.g. u → Uttar Pradesh)</span>
                     </div>
                     <div class="form-group">
                         <label for="district">District</label>
                         <input type="text" id="district" name="district" placeholder="e.g. PUNE (optional)">
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" style="position: relative;">
                         <label for="market">Market / Mandi</label>
-                        <input type="text" id="market" name="market" placeholder="e.g. Pune (optional)">
+                        <input type="text" id="market" name="market" placeholder="Type to search mandis..." autocomplete="off">
+                        <div id="marketDropdown" class="ac-dropdown"></div>
+                        <span class="hint">Start typing to search (e.g. luck → Lucknow)</span>
                     </div>
                     <div class="form-group">
                         <label for="quantity_kg">Quantity (kg)</label>
@@ -107,6 +161,14 @@
                     <div class="form-group">
                         <label for="requested_loan_amount">Requested Loan (₹)</label>
                         <input type="number" id="requested_loan_amount" name="requested_loan_amount" placeholder="e.g. 100000" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="latitude">Latitude</label>
+                        <input type="number" id="latitude" name="latitude" placeholder="Auto-filled from mandi" step="0.0001" min="-90" max="90" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="longitude">Longitude</label>
+                        <input type="number" id="longitude" name="longitude" placeholder="Auto-filled from mandi" step="0.0001" min="-180" max="180" readonly>
                     </div>
                 </div>
                 <div style="margin-top: 20px;">
@@ -328,6 +390,102 @@
             ctx.fillText('Low (q10)', legendX + 214, legendY + 4);
         }
 
+        // ── State Autocomplete ─────────────────────────────────────────
+        const stateInput = document.getElementById('state');
+        const stateDropdown = document.getElementById('stateDropdown');
+        let stateTimeout = null;
+
+        stateInput.addEventListener('input', function() {
+            const q = this.value.trim();
+            clearTimeout(stateTimeout);
+            if (q.length < 1) { stateDropdown.style.display = 'none'; return; }
+            stateTimeout = setTimeout(async () => {
+                try {
+                    const resp = await fetch(`/api/search-states?q=${encodeURIComponent(q)}&limit=10`);
+                    const states = await resp.json();
+                    if (states.length === 0) {
+                        stateDropdown.innerHTML = '<div class="ac-empty">No states found</div>';
+                        stateDropdown.style.display = 'block';
+                        return;
+                    }
+                    stateDropdown.innerHTML = states.map(s =>
+                        `<div class="ac-item" data-val="${s}"><div class="ac-main">${s}</div></div>`
+                    ).join('');
+                    stateDropdown.querySelectorAll('.ac-item').forEach(el => {
+                        el.onclick = () => {
+                            stateInput.value = el.dataset.val;
+                            stateDropdown.style.display = 'none';
+                            // Clear market when state changes
+                            document.getElementById('market').value = '';
+                            document.getElementById('latitude').value = '';
+                            document.getElementById('longitude').value = '';
+                        };
+                    });
+                    stateDropdown.style.display = 'block';
+                } catch(e) { console.error(e); }
+            }, 200);
+        });
+        stateInput.addEventListener('focus', function() { if (this.value.trim().length >= 1) this.dispatchEvent(new Event('input')); });
+
+        // ── Market / Mandi Autocomplete ─────────────────────────────────
+        const marketInput = document.getElementById('market');
+        const marketDropdown = document.getElementById('marketDropdown');
+        let marketTimeout = null;
+        let selectedMandi = null;
+
+        marketInput.addEventListener('input', function() {
+            const q = this.value.trim();
+            clearTimeout(marketTimeout);
+            selectedMandi = null; // reset if user types again
+            document.getElementById('latitude').value = '';
+            document.getElementById('longitude').value = '';
+            if (q.length < 1) { marketDropdown.style.display = 'none'; return; }
+
+            const state = stateInput.value.trim();
+            const params = new URLSearchParams({ q, limit: 15 });
+            if (state) params.set('state', state);
+
+            marketTimeout = setTimeout(async () => {
+                try {
+                    const resp = await fetch(`/api/search-mandi?${params}`);
+                    const mandis = await resp.json();
+                    if (mandis.length === 0) {
+                        marketDropdown.innerHTML = '<div class="ac-empty">No mandis found</div>';
+                        marketDropdown.style.display = 'block';
+                        return;
+                    }
+                    marketDropdown.innerHTML = mandis.map((m, i) =>
+                        `<div class="ac-item" data-idx="${i}">
+                            <div class="ac-main">${m.mandi_name}</div>
+                            <div class="ac-sub">${m.district}, ${m.state} &middot; ${m.latitude}, ${m.longitude}</div>
+                        </div>`
+                    ).join('');
+                    marketDropdown.querySelectorAll('.ac-item').forEach(el => {
+                        el.onclick = () => {
+                            const m = mandis[parseInt(el.dataset.idx)];
+                            marketInput.value = m.mandi_name;
+                            stateInput.value = m.state;
+                            document.getElementById('district').value = m.district || '';
+                            document.getElementById('latitude').value = m.latitude || '';
+                            document.getElementById('longitude').value = m.longitude || '';
+                            selectedMandi = m;
+                            marketDropdown.style.display = 'none';
+                        };
+                    });
+                    marketDropdown.style.display = 'block';
+                } catch(e) { console.error(e); }
+            }, 200);
+        });
+        marketInput.addEventListener('focus', function() { if (this.value.trim().length >= 1) this.dispatchEvent(new Event('input')); });
+
+        // ── Close dropdowns on outside click ────────────────────────────
+        document.addEventListener('click', function(e) {
+            if (!stateInput.contains(e.target) && !stateDropdown.contains(e.target))
+                stateDropdown.style.display = 'none';
+            if (!marketInput.contains(e.target) && !marketDropdown.contains(e.target))
+                marketDropdown.style.display = 'none';
+        });
+
         // ── Form submission ────────────────────────────────────────────
         document.getElementById('predictForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -342,12 +500,12 @@
             resultsDiv.style.display = 'none';
 
             const body = {};
-            const fields = ['commodity', 'state', 'district', 'market', 'quantity_kg', 'warehouse_grade', 'requested_loan_amount'];
+            const fields = ['commodity', 'state', 'district', 'market', 'quantity_kg', 'warehouse_grade', 'requested_loan_amount', 'latitude', 'longitude'];
             for (const f of fields) {
                 const el = document.getElementById(f);
                 const val = el.value.trim();
                 if (val) {
-                    body[f] = f === 'quantity_kg' || f === 'requested_loan_amount' ? parseFloat(val) : val;
+                    body[f] = (f === 'quantity_kg' || f === 'requested_loan_amount' || f === 'latitude' || f === 'longitude') ? parseFloat(val) : val;
                 }
             }
 
@@ -386,8 +544,23 @@
 
                 // Resolution info
                 const resInfo = document.getElementById('resolutionInfo');
+                let resText = '';
                 if (data.resolution_type && data.resolution_type !== 'exact_match') {
-                    resInfo.textContent = `ℹ️ Location resolved via ${data.resolution_type.replace(/_/g, ' ')}: ${data.mandi_id}`;
+                    resText = `ℹ️ Location resolved via ${data.resolution_type.replace(/_/g, ' ')}: ${data.mandi_id}`;
+                    if (data.mandi_distance_km) {
+                        resText += ` (${data.mandi_distance_km} km away)`;
+                    }
+                }
+                if (data.nasa_weather_used) {
+                    resText += (resText ? ' | ' : '') + '🛰️ Live NASA weather data used';
+                }
+                if (data.used_snapshot) {
+                    resText += (resText ? ' | ' : '') + '📊 Serving snapshot data used';
+                } else if (data.nasa_weather_used) {
+                    resText += (resText ? ' | ' : '') + '📡 Weather-only prediction (no price history available)';
+                }
+                if (resText) {
+                    resInfo.textContent = resText;
                     resInfo.style.display = 'block';
                 } else {
                     resInfo.style.display = 'none';
@@ -403,16 +576,19 @@
                 tbody.innerHTML = '';
                 if (data.explanation && data.explanation.components) {
                     const comp = data.explanation.components;
+                    const fi = data.explanation.feature_importance || {};
                     const rows = [
-                        ['Price CV (volatility)', comp.price_cv?.toFixed(4)],
-                        ['Forecast Uncertainty', comp.forecast_uncertainty?.toFixed(4)],
-                        ['Warehouse Count', comp.n_warehouses],
-                        ['Commodity Risk Tier', comp.commodity_tier?.toFixed(2)],
-                        ['Season', comp.season],
+                        ['Price CV (volatility)', comp.price_cv?.toFixed(4), fi.price_cv],
+                        ['Forecast Uncertainty', comp.forecast_uncertainty?.toFixed(4), fi.forecast_uncertainty],
+                        ['Warehouse Count', comp.n_warehouses, fi.warehouse_gap],
+                        ['Warehouse Grade', comp.warehouse_grade, fi.warehouse_grade],
+                        ['Commodity Risk Tier', comp.commodity_tier?.toFixed(2), fi.commodity_tier],
+                        ['Season', comp.season, fi.season_risk],
                     ];
-                    for (const [label, value] of rows) {
+                    for (const [label, value, importance] of rows) {
                         const tr = document.createElement('tr');
-                        tr.innerHTML = `<td>${label}</td><td><strong>${value ?? '—'}</strong></td>`;
+                        const impText = importance != null ? ` <span class="fi-badge">${importance.toFixed(1)}%</span>` : '';
+                        tr.innerHTML = `<td>${label}</td><td><strong>${value ?? '—'}</strong>${impText}</td>`;
                         tbody.appendChild(tr);
                     }
                     // Add thresholds

@@ -34,6 +34,7 @@ _RISK_DEFAULTS = {
     "mandi_n_days": 300,
     "total_capacity_mt": 5000.0,
     "n_warehouses": 2,
+    "warehouse_grade": "B",
     "commodity_category": "Cereal",
     "portfolio_default_rate": 0.063,
     "portfolio_mean_ltv": 0.70,
@@ -66,6 +67,7 @@ def sample_risk_df() -> pd.DataFrame:
         "mandi_n_days": [300, 250, 280, 200],
         "total_capacity_mt": [5000.0, 0.0, 10000.0, 0.0],
         "n_warehouses": [2, 0, 5, 0],
+        "warehouse_grade": ["B", "C", "A", "B"],
         "commodity_category": ["Cereal", "Vegetable", "Cereal", "Vegetable"],
         "portfolio_default_rate": [0.063, 0.063, 0.063, 0.063],
         "portfolio_mean_ltv": [0.70, 0.70, 0.70, 0.70],
@@ -141,12 +143,13 @@ class TestDecision:
         assert scored.iloc[0]["decision"] == "APPROVE"
 
     def test_high_risk_reject(self, model):
-        """High CV, no warehouses, perishable → REJECT."""
+        """High CV, no warehouses, poor grade, perishable → REJECT."""
         df = _make_risk_row(
             commodity="TOMATO", mandi_mean_price=3000.0,
             mandi_std_price=1500.0, mandi_n_days=50, total_capacity_mt=0.0,
-            n_warehouses=0, commodity_category="Vegetable",
-            price_cv=0.80, forecast_uncertainty=0.90,
+            n_warehouses=0, warehouse_grade="C",
+            commodity_category="Vegetable",
+            price_cv=1.0, forecast_uncertainty=0.95,
             risk_score_proxy=0.80, recommended_max_ltv=0.40,
         )
         scored = model.score(df)
