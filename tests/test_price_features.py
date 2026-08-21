@@ -225,10 +225,10 @@ class TestMacroJoin:
     def test_macro_values_populated(self, simple_apmc, simple_cpi, simple_wpi):
         df = add_temporal_features(simple_apmc)
         result = join_macro(df, simple_cpi, simple_wpi)
-        # join_macro adds _year/_month then drops year/month columns
-        # Filter by day_of_month == 1 to pick January rows
+        # join_macro lags CPI/WPI by 1 month (anti-leakage), so
+        # January dates receive December's CPI value (119.0)
         jan_rows = result[result["date"].dt.month == 1]
-        assert jan_rows["food_cpi_index"].iloc[0] == pytest.approx(120.0)
+        assert jan_rows["food_cpi_index"].iloc[0] == pytest.approx(119.0)
 
 
 # ---------------------------------------------------------------------------

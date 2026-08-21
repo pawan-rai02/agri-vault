@@ -39,7 +39,7 @@ log = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_COMMODITIES = ["WHEAT", "TOMATO", "ONION", "POTATO", "SOYABEAN"]
+DEFAULT_COMMODITIES = ["ONION", "TOMATO", "POTATO", "BRINJAL", "GREEN CHILLI"]
 DEFAULT_HORIZONS = [7, 15, 30]
 
 # ---------------------------------------------------------------------------

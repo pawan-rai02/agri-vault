@@ -425,7 +425,8 @@ cp .env.example .env
 # Edit .env with your AWS credentials
 
 # 3. Start the dashboard + API
-PYTHONPATH=. python -m src.api.app
+& { $env:PYTHONPATH = "."; py -m src.api.app }
+
 # Open http://127.0.0.1:5000
 
 # 4. Try a prediction
@@ -467,6 +468,10 @@ PYTHONPATH=. python scripts/s3_upload_standardized.py
 
 # ── API / Dashboard ──
 PYTHONPATH=. python -m src.api.app
+
+# ── Evaluation Report ──
+PYTHONPATH=. python -m src.evaluation.evaluate --no-s3
+PYTHONPATH=. python -m src.evaluation.evaluate --commodity ONION
 
 # ── Tests ──
 python -m pytest tests/ -v
@@ -531,11 +536,11 @@ python -m src.models.risk_ltv_model
 | API key auth + rate limiting | ✅ |
 | NDVI anomaly (multi-year MODIS baseline) | ⏳ Requires multi-year data pull |
 | Multi-year APMC history (2021–2025) | ⏳ Requires data pull from Agmarknet |
-| Model evaluation report (pinball loss, naive baseline comparison) | ⏳ Requires retrained models |
+| Model evaluation report (pinball loss, naive baseline comparison) | ✅ Script ready, run with `--no-s3` or with S3 access |
 | **Models** | |
 | Custom Quantile GBM (from scratch, no sklearn) | ✅ |
 | Walk-forward CV hypertuner | ✅ |
-| 12 models trained (4 commodities × 3 horizons) | ✅ |
+| 15 models trained (5 commodities × 3 horizons) | ✅ |
 | Risk/LTV scoring model (6 signals, data-fitted weights, feature importance) | ✅ |
 | **Live Prediction** | |
 | POST /api/predict endpoint | ✅ |
@@ -552,7 +557,7 @@ python -m src.models.risk_ltv_model
 | NDVI EDA notebook | ✅ |
 | Forecast baseline notebook | ✅ |
 | **Validation** | |
-| Unit tests (58 passing) | ✅ |
+| Unit tests (135 passing, including 17 evaluation tests) | ✅ |
 
 ---
 

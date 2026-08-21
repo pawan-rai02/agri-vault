@@ -117,23 +117,33 @@ def simple_ndvi():
 
 @pytest.fixture
 def simple_cpi():
-    """Monthly food CPI index for Jan–Mar 2025."""
+    """Monthly food CPI index for Dec 2024–Mar 2025.
+
+    Includes Dec 2024 so that January rows in simple_apmc can receive
+    the lagged (anti-leakage) CPI value after the 1-month shift in
+    join_macro.
+    """
     import pandas as pd
 
     return pd.DataFrame({
-        "year": [2025] * 3,
-        "month": [1, 2, 3],
-        "food_cpi_index": [120.0, 121.0, 122.0],
+        "year": [2024, 2025, 2025, 2025],
+        "month": [12, 1, 2, 3],
+        "food_cpi_index": [119.0, 120.0, 121.0, 122.0],
     })
 
 
 @pytest.fixture
 def simple_wpi():
-    """Monthly food WPI index for Jan–Mar 2025."""
+    """Monthly food WPI index for Dec 2024–Mar 2025.
+
+    Includes Dec 2024 so that January rows in simple_apmc can receive
+    the lagged (anti-leakage) WPI value after the 1-month shift in
+    join_macro.
+    """
     import pandas as pd
 
     return pd.DataFrame({
-        "year": [2025] * 3,
-        "month": [1, 2, 3],
-        "food_wpi_index": [110.0, 111.0, 112.0],
+        "year": [2024, 2025, 2025, 2025],
+        "month": [12, 1, 2, 3],
+        "food_wpi_index": [109.0, 110.0, 111.0, 112.0],
     })
