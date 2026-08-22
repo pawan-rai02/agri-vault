@@ -1,14 +1,38 @@
 ﻿project_id: "silver-aurora-416511"
 
-dataset: "COPERNICUS/S2_SR_HARMONIZED"
+# ---------------------------------------------------------------------------
+# Sentinel-2 NDVI (current 2025 pipeline)
+# ---------------------------------------------------------------------------
+sentinel2:
+  dataset: "COPERNICUS/S2_SR_HARMONIZED"
+  start_date: "2025-01-01"
+  end_date: "2026-01-01"
+  cloud_percentage: 30
+  buffer_meters: 500
+  scale_meters: 10
 
+# ---------------------------------------------------------------------------
+# MODIS NDVI (multi-year baseline for anomaly calculation)
+# MOD13A2: 16-day composites, 1 km resolution, V6.1
+#   - NDVI scaled by 0.0001 (raw 0–10000 → NDVI -0.2 to 1.0)
+#   - Quality flag: pixel reliability (0=good, 1=marginal, 2=snow/ice, -1=fill)
+#   - 23 composites per year (16-day intervals)
+# ---------------------------------------------------------------------------
+modis_ndvi:
+  dataset: "MODIS/061/MOD13A2"
+  baseline_start: "2021-01-01"   # 4-year baseline: 2021–2024
+  baseline_end: "2024-12-31"
+  current_start: "2025-01-01"    # year to compute anomalies for
+  current_end: "2025-12-31"
+  buffer_meters: 500              # buffer around mandi points (km ≈ pixels)
+  scale_meters: 1000              # 1 km native MODIS resolution
+  output_dir: "data/raw/ndvi_modis"
+
+# Legacy top-level keys (kept for backward compatibility with fetch_ndvi.py)
+dataset: "COPERNICUS/S2_SR_HARMONIZED"
 start_date: "2025-01-01"
 end_date: "2026-01-01"
-
 cloud_percentage: 30
-
 buffer_meters: 500
-
 scale_meters: 10
-
 output_dir: "data/raw/ndvi"

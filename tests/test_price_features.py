@@ -33,6 +33,7 @@ from src.features.build_price_features import (
     add_temporal_features,
     add_targets,
     join_macro,
+    join_modis_anomaly,
     join_ndvi,
     join_weather,
 )
@@ -229,6 +230,75 @@ class TestMacroJoin:
         # January dates receive December's CPI value (119.0)
         jan_rows = result[result["date"].dt.month == 1]
         assert jan_rows["food_cpi_index"].iloc[0] == pytest.approx(119.0)
+
+
+# ---------------------------------------------------------------------------
+# Tests: MODIS NDVI Anomaly Join
+# ---------------------------------------------------------------------------
+
+class TestModisAnomalyJoin:
+
+    def test_anomaly_columns_added(self, simple_apmc):
+        """Join with MODIS anomaly data adds the expected columns."""
+        import pandas as pd
+        anomaly = pd.DataFrame({
+            "mandi_id": ["M_A", "M_B", "M_C"],
+            "date": pd.date_range("2025-01-01", periods=3, freq="D"),
+            "modis_ndvi": [0.45, 0.48, 0.42],
+            "ndvi_anomaly": [0.5, -0.3, 0.1],
+            "ndvi_anomaly_7d_avg": [0.4, -0.2, 0.05],
+            "ndvi_anomaly_direction": [1.0, -1.0, 1.0],
+            "ndvi_stress_flag": [0, 0, 0],
+            "ndvi_surplus_flag": [0, 0, 0],
+        })
+        result = join_modis_anomaly(simple_apmc, anomaly)
+        assert "modis_ndvi" in result.columns
+        assert "ndvi_anomaly" in result.columns
+        assert "ndvi_stress_flag" in result.columns
+        assert "ndvi_surplus_flag" in result.columns
+
+    def test_anomaly_none_adds_nan_columns(self, simple_apmc):
+        """When anomaly data is None, placeholder NaN columns are added."""
+        result = join_modis_anomaly(simple_apmc, None)
+        assert "modis_ndvi" in result.columns
+        assert "ndvi_anomaly" in result.columns
+        assert result["modis_ndvi"].isna().all()
+        assert result["ndvi_anomaly"].isna().all()
+
+    def test_anomaly_values_match_on_join(self, simple_apmc):
+        """Anomaly values should match on mandi_id + date."""
+        import pandas as pd
+        anomaly = pd.DataFrame({
+            "mandi_id": ["M_A", "M_B"],
+            "date": [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-01")],
+            "modis_ndvi": [0.50, 0.30],
+            "ndvi_anomaly": [1.2, -0.8],
+            "ndvi_anomaly_7d_avg": [1.0, -0.5],
+            "ndvi_anomaly_direction": [1.0, -1.0],
+            "ndvi_stress_flag": [0, 1],
+            "ndvi_surplus_flag": [1, 0],
+        })
+        result = join_modis_anomaly(simple_apmc, anomaly)
+        ma_jan = result[(result["mandi_id"] == "M_A") & (result["date"] == pd.Timestamp("2025-01-01"))]
+        assert ma_jan.iloc[0]["modis_ndvi"] == pytest.approx(0.50)
+        assert ma_jan.iloc[0]["ndvi_anomaly"] == pytest.approx(1.2)
+
+    def test_rows_preserved_after_anomaly_join(self, simple_apmc):
+        """All APMC rows should be preserved (left join)."""
+        import pandas as pd
+        anomaly = pd.DataFrame({
+            "mandi_id": ["M_A"],
+            "date": [pd.Timestamp("2025-01-01")],
+            "modis_ndvi": [0.50],
+            "ndvi_anomaly": [1.2],
+            "ndvi_anomaly_7d_avg": [1.0],
+            "ndvi_anomaly_direction": [1.0],
+            "ndvi_stress_flag": [0],
+            "ndvi_surplus_flag": [1],
+        })
+        result = join_modis_anomaly(simple_apmc, anomaly)
+        # Left join — all APMC rows preserved
+        assert len(result) == len(simple_apmc)
 
 
 # ---------------------------------------------------------------------------

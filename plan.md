@@ -243,10 +243,104 @@ Transform AgriVault from a batch pipeline (S3 → Spark → pre-scored tables �
 | 7 | Prediction Logging | ✅ Completed |
 | 8 | Nightly Snapshot Refresh | ✅ Completed |
 | 9 | Deployment (Optional) | ⬜ Pending |
+| 10 | MODIS NDVI Anomaly (NASA/GEE) | ✅ Completed |
+| 11 | APMC Historical Data (Agmarknet) | ✅ Completed |
+| 12 | NDVI Anomaly x APMC Joiner | ✅ Completed |
+| 13 | MODIS Anomaly in Gold Features | ✅ Completed |
+| 14 | MODIS Anomaly in Risk Features | ✅ Completed |
+| 15 | MODIS Anomaly in Live Prediction API | ✅ Completed |
 
 **Legend:** ✅ Completed | ⬜ Pending | 🔄 In Progress
 
 ---
 
-*Last updated: 2026-08-20 (Parts 1-8 completed)*
+## Part 10: MODIS NDVI Anomaly (NASA/GEE) ✅ Completed
+
+> **Goal:** Fetch multi-year MODIS NDVI data from NASA (via Google Earth Engine)
+> and compute NDVI z-score anomalies relative to a 4-year baseline.
+
+### 10.1 GEE Config ✅ Completed
+- [x] Updated `configs/gee_config.yaml` with MODIS section (`MODIS/061/MOD13A2`)
+- [x] Baseline period: 2021-01-01 to 2024-12-31 (4 years)
+- [x] Current year: 2025
+- [x] Resolution: 1 km (native MODIS)
+
+### 10.2 MODIS NDVI Fetcher ✅ Completed
+- [x] Created `src/ingestion/fetch_modis_ndvi.py`
+- [x] Uses GEE `MODIS/061/MOD13A2` (16-day composites, V6.1)
+- [x] QA filtering via `SummaryQA` band (good + marginal pixels)
+- [x] NDVI scaling: raw DN x 0.0001
+- [x] Batch processing with configurable batch size
+- [x] Outputs: `ndvi_modis_baseline.csv` (per-mandi, per-DOY stats) + `ndvi_modis_current.csv` (2025 + anomalies)
+- [x] Tested with 10 mandis (455 baseline rows, 109 current rows, 100% anomaly coverage)
+
+---
+
+## Part 11: APMC Historical Data (Agmarknet) ✅ Completed
+
+> **Goal:** Fetch historical APMC daily prices (2021-2025) from Agmarknet.
+
+### 11.1 APMC History Fetcher ✅ Completed
+- [x] Created `src/ingestion/fetch_apmc_history.py`
+- [x] Multi-source: manual CSVs, data.gov.in API, Agmarknet search API
+- [x] Manual CSV support with `--manual-only` flag (most reliable)
+- [x] Auto-enrichment with mandi lat/lon from reference file
+- [x] Column name auto-detection for various Agmarknet CSV formats
+
+---
+
+## Part 12: NDVI Anomaly x APMC Joiner ✅ Completed
+
+> **Goal:** Match MODIS NDVI anomalies with APMC price data.
+
+### 12.1 Joiner ✅ Completed
+- [x] Created `src/standardization/join_ndvi_anomaly.py`
+- [x] Primary join on (mandi_id, exact date)
+- [x] Fallback 1: month-level matching (MODIS is monthly, APMC is daily)
+- [x] Fallback 2: state-level seasonal average
+- [x] Added interaction features: `price_ndvi_interaction`, `ndvi_anomaly_commodity_z`
+- [x] Added flags: `ndvi_stress_flag` (anomaly < -1.0), `ndvi_surplus_flag` (anomaly > 1.0)
+- [x] Vectorized month-level fill (no slow row-by-row apply)
+- [x] Tested: 587 rows matched from 5.4M APMC rows (10 test mandis)
+
+---
+
+## Part 13: MODIS Anomaly in Gold Features ✅ Completed
+
+> **Goal:** Integrate MODIS NDVI anomaly into the gold feature pipeline.
+
+### 13.1 Feature Builder Integration ✅ Completed
+- [x] Updated `src/features/build_price_features.py`
+- [x] Added `load_modis_ndvi_anomaly()` loader (graceful fallback if missing)
+- [x] Added `join_modis_anomaly()` joiner
+- [x] 6 new features: `modis_ndvi`, `ndvi_anomaly`, `ndvi_anomaly_7d_avg`, `ndvi_anomaly_direction`, `ndvi_stress_flag`, `ndvi_surplus_flag`
+- [x] Tests: 4 new tests in `TestModisAnomalyJoin` (all passing)
+
+---
+
+## Part 14: MODIS Anomaly in Risk Features ✅ Completed
+
+> **Goal:** Include NDVI anomaly signals in the risk scoring pipeline.
+
+### 14.1 Risk Feature Integration ✅ Completed
+- [x] Updated `src/features/build_risk_features.py`
+- [x] Loads MODIS anomaly from S3 standardized/joined/
+- [x] Joins latest anomaly per state to risk features
+- [x] Adds `ndvi_anomaly`, `ndvi_stress_flag`, `ndvi_surplus_flag` to risk table
+
+---
+
+## Part 15: MODIS Anomaly in Live Prediction API ✅ Completed
+
+> **Goal:** Expose NDVI anomaly data in the live prediction endpoint.
+
+### 15.1 Prediction API Integration ✅ Completed
+- [x] Updated `src/api/predict.py`
+- [x] Reads MODIS anomaly columns from serving snapshot
+- [x] Returns `ndvi_anomaly` dict in response with signal (NORMAL/STRESS/SURPLUS)
+- [x] Available in `GET /api/predict` response
+
+---
+
+*Last updated: 2026-08-22 (Parts 1-15 completed)*
 *Generated with Codebuff 🤖*

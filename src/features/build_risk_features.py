@@ -1,5 +1,5 @@
 """
-AgriVault – Build Gold Risk Features (Gold Layer)
+AgriVault - Build Gold Risk Features (Gold Layer)
 ==================================================
 Joins price features + WDRA warehouse data + loan risk proxy
 to produce a risk feature table for the Loan Risk / LTV model.
@@ -16,10 +16,10 @@ Risk feature groups
 
 Input
 -----
-    standardized/apmc/         → price + mandi identity
-    standardized/wdra/         → warehouse capacity per district
-    standardized/loans/        → loan proxy risk scores
-    models/qgbm_*_predictions  → forecast + uncertainty (Phase 3 output)
+    standardized/apmc/         - price + mandi identity
+    standardized/wdra/         - warehouse capacity per district
+    standardized/loans/        - loan proxy risk scores
+    models/qgbm_*_predictions  - forecast + uncertainty (Phase 3 output)
 
 Output
 ------
@@ -149,9 +149,9 @@ def build_risk_features(
     apmc           : standardized APMC (mandi × commodity × date)
     wdra           : standardized WDRA (district-level warehouses)
     loans          : standardized loan proxy
-    forecast_preds : Phase-3 quantile predictions (optional — adds uncertainty)
+    forecast_preds : Phase-3 quantile predictions (optional - adds uncertainty)
     """
-    # ── Price summary per mandi × commodity ──────────────────────────────
+    # -- Price summary per mandi × commodity ------------------------------
     price_grp = (
         apmc
         .groupby(["state", "district", "commodity"])
@@ -163,7 +163,7 @@ def build_risk_features(
         .reset_index()
     )
 
-    # ── WDRA warehouse features ───────────────────────────────────────────
+    # -- WDRA warehouse features -------------------------------------------
     wdra_feat = build_wdra_district_features(wdra)
     price_grp["district"] = price_grp["district"].str.strip().str.upper()
     price_grp["state"]    = price_grp["state"].str.strip().str.upper()
@@ -172,19 +172,19 @@ def build_risk_features(
     df["total_capacity_mt"] = df["total_capacity_mt"].fillna(0)
     df["n_warehouses"]      = df["n_warehouses"].fillna(0)
 
-    # ── Commodity category ────────────────────────────────────────────────
+    # -- Commodity category ------------------------------------------------
     df["commodity_category"] = df["commodity"].apply(map_commodity_category)
 
-    # ── Loan portfolio features (broadcast) ───────────────────────────────
+    # -- Loan portfolio features (broadcast) -------------------------------
     loan_feat = build_loan_features(loans)
     for col, val in loan_feat.iloc[0].items():
         df[col] = val
 
-    # ── Price volatility as collateral risk proxy ─────────────────────────
-    # Higher std/mean = higher price risk → lower safe LTV
+    # -- Price volatility as collateral risk proxy -------------------------
+    # Higher std/mean = higher price risk - lower safe LTV
     df["price_cv"] = df["mandi_std_price"] / df["mandi_mean_price"].clip(lower=1)
 
-    # ── Forecast uncertainty (Phase 3) ───────────────────────────────────
+    # -- Forecast uncertainty (Phase 3) -----------------------------------
     if forecast_preds is not None:
         # Example: average interval width across horizons
         width_cols = [c for c in forecast_preds.columns if "q90" in c and "pred" in c]
@@ -208,7 +208,51 @@ def build_risk_features(
     else:
         df["forecast_uncertainty"] = np.nan
 
-    # ── Risk score (simple weighted composite — placeholder) ──────────────
+    # -- MODIS NDVI anomaly (vegetation health signal) -------------------
+    # NDVI anomaly: positive = greener than usual (potential oversupply)
+    #               negative = stressed (potential drought / undersupply)
+    try:
+        anomaly = s3.read_parquet_s3(
+            "standardized/joined/",
+            columns=["mandi_id", "date", "modis_ndvi", "ndvi_anomaly",
+                     "ndvi_stress_flag", "ndvi_surplus_flag"],
+        )
+    except (FileNotFoundError, Exception):
+        anomaly = pd.DataFrame()
+
+    if not anomaly.empty and "state" in df.columns:
+        try:
+            mandi_meta = pd.read_csv(
+                Path(__file__).parent.parent.parent / "data" / "reference" / "mandi_locations.csv"
+            )
+            anomaly = anomaly.merge(
+                mandi_meta[["mandi_id", "state"]], on="mandi_id", how="left"
+            )
+            anomaly["state"] = anomaly["state"].str.upper().str.strip()
+            anomaly["date"] = pd.to_datetime(anomaly["date"])
+            latest = (
+                anomaly.sort_values("date")
+                .groupby("state")
+                .last()
+                .reset_index()
+                [["state", "ndvi_anomaly", "ndvi_stress_flag", "ndvi_surplus_flag"]]
+            )
+            df = df.merge(latest, on="state", how="left")
+            df["ndvi_anomaly"] = df["ndvi_anomaly"].fillna(0)
+            df["ndvi_stress_flag"] = df["ndvi_stress_flag"].fillna(0)
+            df["ndvi_surplus_flag"] = df["ndvi_surplus_flag"].fillna(0)
+            log.info("Joined MODIS NDVI anomaly to risk features")
+        except Exception as exc:
+            log.warning("Could not join NDVI anomaly: %s", exc)
+            df["ndvi_anomaly"] = np.nan
+            df["ndvi_stress_flag"] = 0
+            df["ndvi_surplus_flag"] = 0
+    else:
+        df["ndvi_anomaly"] = np.nan
+        df["ndvi_stress_flag"] = 0
+        df["ndvi_surplus_flag"] = 0
+
+    # -- Risk score (simple weighted composite - placeholder) --------------
     # In production this will be the output of the trained risk model.
     # Here we build a rules-based proxy for initial evaluation:
     df["risk_score_proxy"] = (
@@ -217,7 +261,7 @@ def build_risk_features(
         + df["portfolio_default_rate"].fillna(0.06) * 0.3
     )
 
-    # ── LTV recommendation (simplified) ──────────────────────────────────
+    # -- LTV recommendation (simplified) ----------------------------------
     # Max LTV decreases as risk_score rises
     df["recommended_max_ltv"] = (0.75 - df["risk_score_proxy"].clip(0, 0.5)).clip(
         lower=0.40, upper=0.75
@@ -241,7 +285,7 @@ def main():
     s3 = S3Client()
     bucket = s3.bucket
 
-    # ── Load Silver tables ─────────────────────────────────────────────────
+    # -- Load Silver tables -------------------------------------------------
     log.info("Loading APMC Silver from S3...")
     apmc = s3.read_parquet_s3("standardized/apmc/")
 
@@ -251,13 +295,13 @@ def main():
     log.info("Loading Loans Silver from S3...")
     loans = s3.read_parquet_s3("standardized/loans/")
 
-    # ── Optionally load Phase-3 predictions ───────────────────────────────
+    # -- Optionally load Phase-3 predictions -------------------------------
     forecast_preds = None  # Set to loaded DataFrame once Phase 3 is done
 
-    # ── Build risk features ────────────────────────────────────────────────
+    # -- Build risk features ------------------------------------------------
     risk_df = build_risk_features(apmc, wdra, loans, forecast_preds)
 
-    # ── Upload to S3 ─────────────────────────────────────────────────────
+    # -- Upload to S3 -----------------------------------------------------
     out_key = s3.key("features", "risk_features/risk_features.parquet")
     s3.write_parquet_s3(risk_df, out_key)
     log.info("✓ Risk feature table written to S3")

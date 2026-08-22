@@ -559,6 +559,20 @@ def predict():
     # Determine which weather sources were used
     forecast_weather_used = bool(forecast_weather_features and any(v is not None for v in forecast_weather_features.values()))
 
+    # -- MODIS NDVI anomaly info (if available) ------------------------
+    ndvi_anomaly_info = {}
+    for ndvi_col in ["modis_ndvi", "ndvi_anomaly", "ndvi_anomaly_7d_avg",
+                     "ndvi_stress_flag", "ndvi_surplus_flag"]:
+        val = features.get(ndvi_col)
+        if val is not None and not (isinstance(val, float) and np.isnan(val)):
+            ndvi_anomaly_info[ndvi_col] = round(float(val), 4) if isinstance(val, (int, float)) else val
+    if ndvi_anomaly_info:
+        ndvi_anomaly_info["ndvi_signal"] = (
+            "STRESS" if ndvi_anomaly_info.get("ndvi_stress_flag", 0) == 1
+            else "SURPLUS" if ndvi_anomaly_info.get("ndvi_surplus_flag", 0) == 1
+            else "NORMAL"
+        )
+
     result = {
         "request_id": request_id,
         "mandi_id": mandi_id,
@@ -575,6 +589,7 @@ def predict():
         "recommended_ltv_pct": risk_result["recommended_ltv_pct"],
         "recommended_loan_amount": recommended_loan_amount,
         "modal_price": round(modal_price, 2),
+        "ndvi_anomaly": ndvi_anomaly_info or None,
         "explanation": risk_result["explanation"],
         "duration_ms": round(duration_ms, 2),
     }

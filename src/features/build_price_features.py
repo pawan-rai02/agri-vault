@@ -17,10 +17,11 @@ Feature groups
 3. Price momentum           : (price - lag_7d) / lag_7d
 4. Arrivals                 : raw arrivals_tonnes + 7d rolling mean
 5. Weather aggregates       : 7d rolling temp_mean, precip_sum, humidity_mean
-6. NDVI                     : daily forward-filled NDVI + 30d delta
-7. Macro / CPI / WPI        : food CPI index + food WPI index (monthly join)
-8. Temporal                 : day-of-week, day-of-month, month, is_weekend
-9. Targets (supervised)     : target_price_7d, target_price_15d, target_price_30d
+6. NDVI (Sentinel-2)        : daily forward-filled NDVI + 30d delta
+7. NDVI Anomaly (MODIS)     : z-score anomaly vs 4-year baseline + trend flags
+8. Macro / CPI / WPI        : food CPI index + food WPI index (monthly join)
+9. Temporal                 : day-of-week, day-of-month, month, is_weekend
+10. Targets (supervised)    : target_price_7d, target_price_15d, target_price_30d
 
 Input  : s3://agrivault-lake-pawan/standardized/
 Output : s3://agrivault-lake-pawan/features/price_features/
@@ -80,6 +81,31 @@ def load_ndvi(s3: S3Client) -> pd.DataFrame:
     # (e.g. 'state' from state=MAHARASHTRA/ paths). Keeping them would cause a
     # state_x / state_y column collision when merged with APMC.
     return df[["mandi_id", "date", "ndvi"]]
+
+
+def load_modis_ndvi_anomaly(s3: S3Client) -> pd.DataFrame | None:
+    """Load MODIS NDVI anomaly features from the joined dataset.
+
+    These are produced by join_ndvi_anomaly.py and uploaded to S3.
+    Returns None if not available (graceful fallback).
+    """
+    try:
+        cols = [
+            "mandi_id", "date", "modis_ndvi", "ndvi_anomaly",
+            "ndvi_anomaly_7d_avg", "ndvi_anomaly_direction",
+            "ndvi_stress_flag", "ndvi_surplus_flag",
+        ]
+        df = s3.read_parquet_s3("standardized/joined/", columns=cols)
+        df["date"] = pd.to_datetime(df["date"])
+        log.info("MODIS NDVI anomaly: %d rows, %d mandis",
+                 len(df), df["mandi_id"].nunique())
+        return df[[c for c in cols if c in df.columns]]
+    except FileNotFoundError:
+        log.warning("MODIS NDVI anomaly data not found on S3 — skipping")
+        return None
+    except Exception as exc:
+        log.warning("Could not load MODIS NDVI anomaly: %s", exc)
+        return None
 
 
 def load_weather(s3: S3Client) -> pd.DataFrame:
@@ -230,6 +256,27 @@ def join_ndvi(apmc: pd.DataFrame, ndvi: pd.DataFrame) -> pd.DataFrame:
         .transform(lambda x: x.shift(30))
     )
     merged["ndvi_delta_30d"] = merged["ndvi"] - merged["ndvi_lag_30d"]
+    return merged
+
+
+def join_modis_anomaly(apmc: pd.DataFrame, anomaly: pd.DataFrame | None) -> pd.DataFrame:
+    """Left-join MODIS NDVI anomaly features onto the feature table.
+
+    These z-score anomalies compare current vegetation health against a
+    4-year MODIS baseline (2021–2024), providing a drought/surplus signal
+    that the raw Sentinel-2 NDVI lacks.
+    """
+    if anomaly is None:
+        # Add placeholder columns so downstream code doesn't break
+        for col in ["modis_ndvi", "ndvi_anomaly", "ndvi_anomaly_7d_avg",
+                    "ndvi_anomaly_direction", "ndvi_stress_flag", "ndvi_surplus_flag"]:
+            apmc[col] = np.nan
+        return apmc
+
+    merged = apmc.merge(anomaly, on=["mandi_id", "date"], how="left")
+    n_matched = merged["ndvi_anomaly"].notna().sum()
+    log.info("MODIS anomaly join: %d / %d rows matched (%.1f%%)",
+             n_matched, len(merged), n_matched / len(merged) * 100)
     return merged
 
 
@@ -471,6 +518,11 @@ def main():
 
     log.info("Joining NDVI...")
     df = join_ndvi(df, ndvi)
+
+    log.info("Loading MODIS NDVI anomaly...")
+    modis_anomaly = load_modis_ndvi_anomaly(s3)
+    log.info("Joining MODIS NDVI anomaly...")
+    df = join_modis_anomaly(df, modis_anomaly)
 
     log.info("Joining macro (CPI + WPI)...")
     df = join_macro(df, cpi, wpi)

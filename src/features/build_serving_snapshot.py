@@ -1,9 +1,9 @@
 """
-AgriVault – Build Serving Snapshot (Feature Store for Live API)
+AgriVault - Build Serving Snapshot (Feature Store for Live API)
 ================================================================
 Runs after the daily Gold price_features build.  Takes the latest row per
 (mandi_id, commodity) and writes a small, fast-loading snapshot for the
-live prediction API to read — one row per active mandi-commodity pair.
+live prediction API to read - one row per active mandi-commodity pair.
 
 This is completely different from the Gold price_features table, which has
 one row per historical date; this table has exactly one row per active
@@ -49,18 +49,18 @@ def build_snapshot(s3: S3Client | None = None) -> pd.DataFrame:
     if s3 is None:
         s3 = S3Client()
 
-    # ── 1. Read Gold price_features ──────────────────────────────────────
+    # -- 1. Read Gold price_features --------------------------------------
     log.info("Loading Gold price_features from S3...")
     gold = s3.read_parquet_s3("features/price_features/")
-    log.info("  → %d rows, %d cols", len(gold), len(gold.columns))
+    log.info("  - %d rows, %d cols", len(gold), len(gold.columns))
 
     if gold.empty:
-        raise ValueError("Gold price_features is empty — nothing to snapshot")
+        raise ValueError("Gold price_features is empty - nothing to snapshot")
 
-    # ── 2. Sort by date so we can take the latest per group ──────────────
+    # -- 2. Sort by date so we can take the latest per group --------------
     gold = gold.sort_values("date", ascending=False)
 
-    # ── 3. Take latest row per (mandi_id, commodity) ─────────────────────
+    # -- 3. Take latest row per (mandi_id, commodity) ---------------------
     # groupby().head(1) is faster than groupby().tail(1) on desc-sorted data
     snapshot = (
         gold
@@ -78,13 +78,13 @@ def build_snapshot(s3: S3Client | None = None) -> pd.DataFrame:
         n_pairs, n_mandis, n_commodities,
     )
 
-    # ── 4. Drop target columns (future-leaking) ─────────────────────────
+    # -- 4. Drop target columns (future-leaking) -------------------------
     target_cols = [c for c in snapshot.columns if c.startswith("target_price_")]
     if target_cols:
         snapshot = snapshot.drop(columns=target_cols)
         log.info("Dropped target columns: %s", target_cols)
 
-    # ── 5. Write to S3 ──────────────────────────────────────────────────
+    # -- 5. Write to S3 --------------------------------------------------
     s3.write_parquet_s3(snapshot, _SNAPSHOT_KEY)
     log.info(
         "✓ Serving snapshot written: s3://%s/%s (%d rows, %d cols)",
@@ -105,7 +105,7 @@ def load_snapshot(s3: S3Client | None = None) -> pd.DataFrame:
 
     log.info("Loading serving snapshot from s3://%s/%s", s3.bucket, _SNAPSHOT_KEY)
     df = s3.read_parquet(_SNAPSHOT_KEY)
-    log.info("  → %d rows, %d cols", len(df), len(df.columns))
+    log.info("  - %d rows, %d cols", len(df), len(df.columns))
     return df
 
 
