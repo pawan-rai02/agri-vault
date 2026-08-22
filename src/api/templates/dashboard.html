@@ -1,189 +1,367 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AgriVault — Decision Support Dashboard</title>
+    <meta name="description" content="Agricultural commodity risk scoring and AI-powered lending decisions for Indian mandis.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
-        .header { background: linear-gradient(135deg, #2d5016 0%, #4a7c23 100%); color: white; padding: 24px 32px; }
-        .header h1 { font-size: 28px; margin-bottom: 4px; }
-        .header p { opacity: 0.85; font-size: 14px; }
-        .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+        :root {
+            --bg-deep:     #050d1a;
+            --bg-card:     rgba(12,25,48,0.72);
+            --border:      rgba(56,130,255,0.18);
+            --border-glow: rgba(56,130,255,0.45);
+            --accent:      #3b82f6;
+            --accent2:     #06b6d4;
+            --green:       #10b981;
+            --yellow:      #f59e0b;
+            --red:         #ef4444;
+            --text:        #e2e8f0;
+            --muted:       #64748b;
+            --glow-g:      rgba(16,185,129,0.3);
+            --glow-b:      rgba(59,130,246,0.3);
+        }
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family:'Inter',sans-serif;
+            background: var(--bg-deep);
+            color: var(--text);
+            min-height:100vh;
+            overflow-x:hidden;
+        }
+        body::after {
+            content:''; position:fixed; inset:0;
+            background-image: linear-gradient(rgba(56,130,255,.04) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(56,130,255,.04) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events:none; z-index:0;
+        }
+        /* Floating Orbs */
+        .orb { position:fixed; border-radius:50%; filter:blur(90px); pointer-events:none; z-index:0; animation:float 20s infinite alternate cubic-bezier(0.4, 0, 0.2, 1); opacity:0.6; }
+        .orb-1 { width:450px; height:450px; background:rgba(59,130,246,0.15); top:-150px; left:-100px; }
+        .orb-2 { width:400px; height:400px; background:rgba(16,185,129,0.12); bottom:-100px; right:-50px; animation-delay:-5s; }
+        .orb-3 { width:500px; height:500px; background:rgba(139,92,246,0.1); top:30%; left:40%; animation-delay:-12s; }
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(40px, 60px) scale(1.1); }
+            100% { transform: translate(-30px, 40px) scale(0.95); }
+        }
 
-        /* KPI Cards */
-        .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
-        .kpi-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-        .kpi-card .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-        .kpi-card .value { font-size: 32px; font-weight: 700; margin-top: 4px; }
-        .kpi-card .sub { font-size: 13px; color: #666; margin-top: 4px; }
-        .kpi-card.approve .value { color: #2d8a4e; }
-        .kpi-card.conditional .value { color: #d4a017; }
-        .kpi-card.reject .value { color: #c0392b; }
-
-        /* Sections */
-        .section { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 24px; }
-        .section h2 { font-size: 18px; margin-bottom: 16px; color: #2d5016; }
-
-        /* Tables */
-        table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #e0e0e0; color: #666; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; }
-        tr:hover { background: #f9fbf7; }
-        a { color: #2d5016; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-
-        /* Decision badges */
-        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-        .badge.approve { background: #e8f5e9; color: #2d8a4e; }
-        .badge.conditional { background: #fff8e1; color: #b8860b; }
-        .badge.reject { background: #fce4ec; color: #c0392b; }
-
-        /* Decision bars */
-        .decision-bar { display: flex; height: 24px; border-radius: 4px; overflow: hidden; margin-top: 8px; }
-        .decision-bar .seg { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: white; }
-        .decision-bar .seg.approve { background: #4caf50; }
-        .decision-bar .seg.conditional { background: #ffc107; color: #333; }
-        .decision-bar .seg.reject { background: #f44336; }
-
-        /* Risk meter */
-        .risk-meter { width: 100%; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
-        .risk-meter .fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
-
-        /* Grid layout */
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-        @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
-
-        /* Search */
-        .search-box { width: 100%; padding: 10px 16px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; margin-bottom: 16px; }
-        .search-box:focus { outline: none; border-color: #4a7c23; }
+        .navbar {
+            position:sticky; top:0; z-index:100;
+            display:flex; align-items:center; justify-content:space-between;
+            padding:0 32px; height:64px;
+            background:rgba(5,13,26,.88);
+            backdrop-filter:blur(20px);
+            border-bottom:1px solid var(--border);
+        }
+        .nav-brand {
+            display:flex; align-items:center; gap:12px;
+            font-size:18px; font-weight:700; color:var(--text);
+            text-decoration:none;
+        }
+        .logo-icon {
+            width:36px; height:36px;
+            background:linear-gradient(135deg, var(--green), var(--accent));
+            border-radius:10px;
+            display:flex; align-items:center; justify-content:center;
+            font-size:18px;
+            box-shadow: 0 0 20px var(--glow-g);
+            animation: pulse-glow 3s infinite alternate;
+        }
+        @keyframes pulse-glow { to { box-shadow: 0 0 35px var(--glow-b); } }
+        
+        .nav-links { display:flex; gap:4px; }
+        .nav-link {
+            padding:8px 16px; border-radius:8px;
+            color:var(--muted); text-decoration:none;
+            font-size:14px; font-weight:500;
+            transition:all .3s ease;
+        }
+        .nav-link:hover { color:var(--text); background:rgba(59,130,246,.12); transform:translateY(-1px); }
+        .nav-link.active { color:var(--accent); background:rgba(59,130,246,.1); }
+        .nav-status { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); }
+        .status-dot {
+            width:8px; height:8px; border-radius:50%;
+            background:var(--green); box-shadow:0 0 8px var(--green);
+            animation:pulse 2s infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+        
+        .page { position:relative; z-index:1; }
+        .hero { padding:48px 32px 28px; max-width:1400px; margin:0 auto; }
+        .hero-eyebrow { font-size:11px; font-weight:600; letter-spacing:3px; color:var(--accent); text-transform:uppercase; margin-bottom:10px; }
+        .hero-title {
+            font-size:42px; font-weight:800;
+            background:linear-gradient(135deg,#fff 0%,rgba(255,255,255,.55) 100%);
+            -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+            line-height:1.1; margin-bottom:10px;
+        }
+        .hero-sub { font-size:14px; color:var(--muted); max-width:460px; }
+        .container { max-width:1400px; margin:0 auto; padding:0 32px 48px; }
+        
+        .card {
+            background:var(--bg-card);
+            border:1px solid var(--border);
+            border-radius:16px;
+            backdrop-filter:blur(16px);
+            transition:all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card:hover { 
+            transform: translateY(-4px); 
+            border-color:var(--border-glow); 
+            box-shadow:0 12px 40px rgba(59,130,246,.12); 
+        }
+        
+        .kpi-grid {
+            display:grid;
+            grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+            gap:16px; margin-bottom:20px;
+        }
+        .kpi-card { padding:24px; position:relative; overflow:hidden; }
+        .kpi-card::before {
+            content:''; position:absolute; top:0; left:0;
+            width:100%; height:2px;
+            background:linear-gradient(90deg,transparent,var(--accent),transparent);
+            opacity:0; transition:opacity .3s;
+        }
+        .kpi-card:hover::before { opacity:1; }
+        .kpi-label { font-size:11px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
+        .kpi-value { font-size:36px; font-weight:800; line-height:1; font-family:'JetBrains Mono',monospace; transition: transform 0.3s ease; }
+        .kpi-card:hover .kpi-value { transform: scale(1.05) origin-left; }
+        .kpi-sub { font-size:12px; color:var(--muted); margin-top:8px; }
+        
+        .section-header {
+            display:flex; align-items:center; justify-content:space-between;
+            padding:20px 24px 16px;
+            border-bottom:1px solid var(--border);
+        }
+        .section-title { font-size:14px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:8px; }
+        .s-icon { width:28px; height:28px; background:rgba(59,130,246,.15); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; }
+        .section-tag { font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:var(--muted); background:rgba(100,116,139,.15); padding:3px 10px; border-radius:20px; }
+        
+        .decision-bar-wrap { padding:20px 24px; }
+        .decision-bar { display:flex; height:32px; border-radius:8px; overflow:hidden; gap:2px; }
+        .seg { display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; letter-spacing:.5px; color:white; transition:filter .2s, flex-grow .3s ease; }
+        .seg:hover { filter:brightness(1.15); flex-grow: 1.1 !important; }
+        .seg.approve    { background:linear-gradient(135deg,#059669,#10b981); }
+        .seg.conditional{ background:linear-gradient(135deg,#d97706,#f59e0b); }
+        .seg.reject     { background:linear-gradient(135deg,#dc2626,#ef4444); }
+        
+        .decision-legend { display:flex; gap:20px; margin-top:12px; }
+        .leg-item { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+        .leg-dot { width:10px; height:10px; border-radius:3px; }
+        .leg-dot.approve { background:var(--green); }
+        .leg-dot.conditional { background:var(--yellow); }
+        .leg-dot.reject { background:var(--red); }
+        
+        .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px; }
+        @media(max-width:900px){ .grid-2{grid-template-columns:1fr;} }
+        
+        .search-wrap { padding:16px 24px 0; }
+        .search-wrap-inner { position:relative; }
+        .search-icon { position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:14px; pointer-events:none; transition: color 0.3s; }
+        .search-input {
+            width:100%; padding:10px 16px 10px 38px;
+            background:rgba(255,255,255,.05);
+            border:1px solid var(--border); border-radius:10px;
+            color:var(--text); font-family:'Inter',sans-serif; font-size:13px;
+            outline:none; transition:all .3s ease;
+        }
+        .search-input:focus { border-color:var(--accent); box-shadow:0 0 0 4px rgba(59,130,246,.15); background:rgba(59,130,246,.05); }
+        .search-input:focus + .search-icon { color: var(--accent); }
+        .search-input::placeholder { color:var(--muted); }
+        
+        .data-table { width:100%; border-collapse:collapse; }
+        .data-table th {
+            text-align:left; padding:12px 24px;
+            font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase;
+            color:var(--muted); border-bottom:1px solid var(--border);
+        }
+        .data-table td { padding:12px 24px; font-size:13px; color:var(--text); border-bottom:1px solid rgba(255,255,255,.04); }
+        .data-table tbody tr { transition:all .2s ease; }
+        .data-table tbody tr:hover { background:rgba(59,130,246,.08); transform: scale(1.01); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        
+        .risk-bar-wrap { display:flex; align-items:center; gap:10px; }
+        .risk-bar { width:80px; height:5px; background:rgba(255,255,255,.08); border-radius:99px; overflow:hidden; flex-shrink:0; }
+        .risk-bar .fill { height:100%; border-radius:99px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
+        .risk-val { font-family:'JetBrains Mono',monospace; font-size:12px; }
+        
+        .badge {
+            display:inline-flex; align-items:center; gap:4px;
+            padding:3px 10px; border-radius:20px;
+            font-size:11px; font-weight:700; letter-spacing:.5px; text-transform:uppercase;
+        }
+        .badge::before { content:''; width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+        .badge.approve     { background:rgba(16,185,129,.15); color:var(--green); border:1px solid rgba(16,185,129,.3); }
+        .badge.approve::before { background:var(--green); }
+        .badge.conditional { background:rgba(245,158,11,.15); color:var(--yellow); border:1px solid rgba(245,158,11,.3); }
+        .badge.conditional::before { background:var(--yellow); }
+        .badge.reject      { background:rgba(239,68,68,.15); color:var(--red); border:1px solid rgba(239,68,68,.3); }
+        .badge.reject::before { background:var(--red); }
+        .badge.low  { background:rgba(16,185,129,.15); color:var(--green); border:1px solid rgba(16,185,129,.3); }
+        .badge.low::before { background:var(--green); }
+        .badge.medium { background:rgba(245,158,11,.15); color:var(--yellow); border:1px solid rgba(245,158,11,.3); }
+        .badge.medium::before { background:var(--yellow); }
+        .badge.high { background:rgba(239,68,68,.15); color:var(--red); border:1px solid rgba(239,68,68,.3); }
+        .badge.high::before { background:var(--red); }
+        
+        .commodity-link { color:var(--accent); text-decoration:none; font-weight:500; transition:color .2s; }
+        .commodity-link:hover { color:var(--accent2); text-shadow: 0 0 10px rgba(6,182,212,0.4); }
+        .view-btn { color:var(--muted); text-decoration:none; font-size:12px; display:inline-flex; align-items:center; gap:4px; transition:all .2s; }
+        .view-btn:hover { color:var(--accent); transform: translateX(3px); }
+        
+        code { font-family:'JetBrains Mono',monospace; font-size:12px; background:rgba(59,130,246,.1); color:var(--accent2); padding:2px 8px; border-radius:6px; border:1px solid rgba(6,182,212,.2); transition: all 0.2s; }
+        tr:hover code { background:rgba(59,130,246,.2); }
+        .try-link { color:var(--accent); text-decoration:none; font-size:12px; font-weight:500; transition: all 0.2s; display: inline-block; }
+        .try-link:hover { color:var(--accent2); transform: translateX(3px); }
+        
+        ::-webkit-scrollbar { width:6px; }
+        ::-webkit-scrollbar-track { background:transparent; }
+        ::-webkit-scrollbar-thumb { background:rgba(59,130,246,.3); border-radius:3px; }
+        
+        .fade-up { opacity:0; transform:translateY(24px); animation:fadeUp .6s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        @keyframes fadeUp { to { opacity:1; transform:translateY(0); } }
+        .d1{animation-delay:.05s} .d2{animation-delay:.15s} .d3{animation-delay:.25s} .d4{animation-delay:.35s} .d5{animation-delay:.45s}
     </style>
 </head>
 <body>
-    <div class="header">
-        <nav style="margin-bottom: 8px;">
-            <a href="/" style="color: white; text-decoration: none; margin-right: 16px; font-weight: 600;">Dashboard</a>
-            <a href="/predict" style="color: white; text-decoration: none; opacity: 0.85;">Predict LTV</a>
-        </nav>
-        <h1>🌾 AgriVault — Decision Support</h1>
-        <p>Agricultural commodity risk scoring and lending decisions | {{ total|int }} mandi×commodity pairs scored</p>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+
+<nav class="navbar">
+    <a class="nav-brand" href="/">
+        <div class="logo-icon">🌾</div>
+        AgriVault
+    </a>
+    <div class="nav-links">
+        <a href="/" class="nav-link active">Dashboard</a>
+        <a href="/predict" class="nav-link">Predict LTV</a>
+    </div>
+    <div class="nav-status">
+        <div class="status-dot"></div>
+        <span>{{ total|int }} pairs scored</span>
+    </div>
+</nav>
+
+<div class="page">
+    <div class="hero fade-up">
+        <p class="hero-eyebrow">Decision Support System</p>
+        <h1 class="hero-title">Commodity Risk<br>Intelligence</h1>
+        <p class="hero-sub">AI-powered agricultural risk scoring and lending decisions across Indian mandi markets.</p>
     </div>
 
     <div class="container">
-        <!-- KPI Cards -->
-        <div class="kpi-row">
-            <div class="kpi-card">
-                <div class="label">Total Scored</div>
-                <div class="value">{{ "{:,}".format(total) }}</div>
-                <div class="sub">mandi × commodity pairs</div>
+        <!-- KPI -->
+        <div class="kpi-grid fade-up d1">
+            <div class="card kpi-card">
+                <div class="kpi-label">Total Scored</div>
+                <div class="kpi-value" style="color:var(--accent);text-shadow:0 0 20px var(--glow-b);">{{ "{:,}".format(total) }}</div>
+                <div class="kpi-sub">mandi × commodity pairs</div>
             </div>
-            <div class="kpi-card approve">
-                <div class="label">APPROVE</div>
-                <div class="value">{{ decisions.get('APPROVE', 0) }}</div>
-                <div class="sub">{{ "%.1f"|format(decisions.get('APPROVE', 0) / total * 100) }}% of total</div>
+            <div class="card kpi-card">
+                <div class="kpi-label">Approve</div>
+                <div class="kpi-value" style="color:var(--green);text-shadow:0 0 20px var(--glow-g);">{{ decisions.get('APPROVE', 0) }}</div>
+                <div class="kpi-sub">{{ "%.1f"|format(decisions.get('APPROVE', 0) / total * 100) }}% · LTV up to 75%</div>
             </div>
-            <div class="kpi-card conditional">
-                <div class="label">CONDITIONAL</div>
-                <div class="value">{{ decisions.get('CONDITIONAL', 0) }}</div>
-                <div class="sub">{{ "%.1f"|format(decisions.get('CONDITIONAL', 0) / total * 100) }}% of total</div>
+            <div class="card kpi-card">
+                <div class="kpi-label">Conditional</div>
+                <div class="kpi-value" style="color:var(--yellow);">{{ decisions.get('CONDITIONAL', 0) }}</div>
+                <div class="kpi-sub">{{ "%.1f"|format(decisions.get('CONDITIONAL', 0) / total * 100) }}% · LTV 50–65%</div>
             </div>
-            <div class="kpi-card reject">
-                <div class="label">REJECT</div>
-                <div class="value">{{ decisions.get('REJECT', 0) }}</div>
-                <div class="sub">{{ "%.1f"|format(decisions.get('REJECT', 0) / total * 100) }}% of total</div>
+            <div class="card kpi-card">
+                <div class="kpi-label">Reject</div>
+                <div class="kpi-value" style="color:var(--red);">{{ decisions.get('REJECT', 0) }}</div>
+                <div class="kpi-sub">{{ "%.1f"|format(decisions.get('REJECT', 0) / total * 100) }}% · LTV capped</div>
             </div>
-            <div class="kpi-card">
-                <div class="label">Avg Risk Score</div>
-                <div class="value">{{ avg_risk }}</div>
-                <div class="sub">scale 0 (safe) → 1 (risky)</div>
+            <div class="card kpi-card">
+                <div class="kpi-label">Avg Risk Score</div>
+                <div class="kpi-value" style="color:var(--text);">{{ avg_risk }}</div>
+                <div class="kpi-sub">0 = safe · 1 = risky</div>
             </div>
-            <div class="kpi-card">
-                <div class="label">Avg Recommended LTV</div>
-                <div class="value">{{ avg_ltv }}%</div>
-                <div class="sub">loan-to-value ratio</div>
-            </div>
-        </div>
-
-        <!-- Overall Decision Distribution -->
-        <div class="section">
-            <h2>Decision Distribution</h2>
-            <div class="decision-bar">
-                {% set total_dec = decisions.get('APPROVE', 0) + decisions.get('CONDITIONAL', 0) + decisions.get('REJECT', 0) %}
-                {% if total_dec > 0 %}
-                <div class="seg approve" style="width: {{ decisions.get('APPROVE', 0) / total_dec * 100 }}%">
-                    APPROVE {{ "%.0f"|format(decisions.get('APPROVE', 0) / total_dec * 100) }}%
-                </div>
-                <div class="seg conditional" style="width: {{ decisions.get('CONDITIONAL', 0) / total_dec * 100 }}%">
-                    CONDITIONAL {{ "%.0f"|format(decisions.get('CONDITIONAL', 0) / total_dec * 100) }}%
-                </div>
-                <div class="seg reject" style="width: {{ decisions.get('REJECT', 0) / total_dec * 100 }}%">
-                    REJECT {{ "%.0f"|format(decisions.get('REJECT', 0) / total_dec * 100) }}%
-                </div>
-                {% endif %}
+            <div class="card kpi-card">
+                <div class="kpi-label">Avg LTV</div>
+                <div class="kpi-value" style="color:var(--accent2);">{{ avg_ltv }}%</div>
+                <div class="kpi-sub">loan-to-value ratio</div>
             </div>
         </div>
 
-        <div class="grid-2">
-            <!-- Top Commodities -->
-            <div class="section">
-                <h2>Top Commodities by Volume</h2>
-                <input type="text" class="search-box" id="commoditySearch" placeholder="Search commodities...">
-                <table id="commodityTable">
-                    <thead>
-                        <tr>
-                            <th>Commodity</th>
-                            <th>Count</th>
-                            <th>Avg Risk</th>
-                            <th>Avg LTV</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
+        <!-- Decision Distribution -->
+        <div class="card fade-up d2" style="margin-bottom:20px;">
+            <div class="section-header">
+                <div class="section-title"><div class="s-icon">📊</div>Decision Distribution</div>
+                <span class="section-tag">Portfolio View</span>
+            </div>
+            <div class="decision-bar-wrap">
+                <div class="decision-bar">
+                    {% set total_dec = decisions.get('APPROVE',0) + decisions.get('CONDITIONAL',0) + decisions.get('REJECT',0) %}
+                    {% if total_dec > 0 %}
+                    <div class="seg approve" style="width:{{ decisions.get('APPROVE',0) / total_dec * 100 }}%">{{ "%.0f"|format(decisions.get('APPROVE',0) / total_dec * 100) }}%</div>
+                    <div class="seg conditional" style="width:{{ decisions.get('CONDITIONAL',0) / total_dec * 100 }}%">{{ "%.0f"|format(decisions.get('CONDITIONAL',0) / total_dec * 100) }}%</div>
+                    <div class="seg reject" style="width:{{ decisions.get('REJECT',0) / total_dec * 100 }}%">{{ "%.0f"|format(decisions.get('REJECT',0) / total_dec * 100) }}%</div>
+                    {% endif %}
+                </div>
+                <div class="decision-legend">
+                    <div class="leg-item"><div class="leg-dot approve"></div>Approve</div>
+                    <div class="leg-item"><div class="leg-dot conditional"></div>Conditional</div>
+                    <div class="leg-item"><div class="leg-dot reject"></div>Reject</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2-col -->
+        <div class="grid-2 fade-up d3">
+            <div class="card">
+                <div class="section-header">
+                    <div class="section-title"><div class="s-icon">🌽</div>Top Commodities</div>
+                    <span class="section-tag">By Volume</span>
+                </div>
+                <div class="search-wrap">
+                    <div class="search-wrap-inner">
+                        <span class="search-icon">⌕</span>
+                        <input type="text" class="search-input" id="commoditySearch" placeholder="Search commodities...">
+                    </div>
+                </div>
+                <table class="data-table" id="commodityTable" style="margin-top:8px;">
+                    <thead><tr><th>Commodity</th><th>Count</th><th>Risk</th><th>LTV</th><th></th></tr></thead>
                     <tbody>
                         {% for c in top_commodities %}
                         <tr>
-                            <td><a href="/commodity/{{ c.commodity|lower|replace(' ', '-') }}">{{ c.commodity }}</a></td>
-                            <td>{{ c.count }}</td>
+                            <td><a class="commodity-link" href="/commodity/{{ c.commodity|lower|replace(' ','-') }}">{{ c.commodity }}</a></td>
+                            <td style="font-family:'JetBrains Mono',monospace;font-size:12px;">{{ c.count }}</td>
                             <td>
-                                <div class="risk-meter">
-                                    <div class="fill" style="width: {{ (c.avg_risk * 100)|int }}%; background: {% if c.avg_risk < 0.35 %}#4caf50{% elif c.avg_risk < 0.60 %}#ffc107{% else %}#f44336{% endif %}"></div>
+                                <div class="risk-bar-wrap">
+                                    <div class="risk-bar"><div class="fill" style="width:{{ (c.avg_risk*100)|int }}%;background:{% if c.avg_risk < 0.35 %}var(--green){% elif c.avg_risk < 0.60 %}var(--yellow){% else %}var(--red){% endif %};"></div></div>
+                                    <span class="risk-val" style="color:{% if c.avg_risk < 0.35 %}var(--green){% elif c.avg_risk < 0.60 %}var(--yellow){% else %}var(--red){% endif %};">{{ c.avg_risk }}</span>
                                 </div>
-                                {{ c.avg_risk }}
                             </td>
-                            <td>{{ c.avg_ltv }}%</td>
-                            <td><a href="/commodity/{{ c.commodity|lower|replace(' ', '-') }}">View →</a></td>
+                            <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent2);">{{ c.avg_ltv }}%</td>
+                            <td><a class="view-btn" href="/commodity/{{ c.commodity|lower|replace(' ','-') }}">View →</a></td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-
-            <!-- Risk by Category -->
-            <div class="section">
-                <h2>Risk by Commodity Category</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Category</th>
-                            <th>Count</th>
-                            <th>Avg Risk</th>
-                            <th>Risk Level</th>
-                        </tr>
-                    </thead>
+            <div class="card">
+                <div class="section-header">
+                    <div class="section-title"><div class="s-icon">🏷️</div>Risk by Category</div>
+                    <span class="section-tag">Classification</span>
+                </div>
+                <table class="data-table" style="margin-top:8px;">
+                    <thead><tr><th>Category</th><th>Count</th><th>Avg Risk</th><th>Level</th></tr></thead>
                     <tbody>
                         {% for c in cat_risk %}
                         <tr>
-                            <td>{{ c.commodity_category }}</td>
-                            <td>{{ c.count }}</td>
-                            <td>{{ c.avg_risk }}</td>
+                            <td style="font-weight:500;">{{ c.commodity_category }}</td>
+                            <td style="font-family:'JetBrains Mono',monospace;font-size:12px;">{{ c.count }}</td>
+                            <td><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:{% if c.avg_risk < 0.35 %}var(--green){% elif c.avg_risk < 0.60 %}var(--yellow){% else %}var(--red){% endif %};">{{ c.avg_risk }}</span></td>
                             <td>
-                                {% if c.avg_risk < 0.35 %}
-                                    <span class="badge approve">LOW</span>
-                                {% elif c.avg_risk < 0.60 %}
-                                    <span class="badge conditional">MEDIUM</span>
-                                {% else %}
-                                    <span class="badge reject">HIGH</span>
-                                {% endif %}
+                                {% if c.avg_risk < 0.35 %}<span class="badge low">LOW</span>
+                                {% elif c.avg_risk < 0.60 %}<span class="badge medium">MED</span>
+                                {% else %}<span class="badge high">HIGH</span>{% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -193,88 +371,61 @@
         </div>
 
         <!-- State Summary -->
-        <div class="section">
-            <h2>State-Level Summary (Top 15)</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>State</th>
-                        <th>Count</th>
-                        <th>Avg Risk</th>
-                        <th>Approve Rate</th>
-                        <th>Risk Meter</th>
-                    </tr>
-                </thead>
+        <div class="card fade-up d4" style="margin-bottom:20px;">
+            <div class="section-header">
+                <div class="section-title"><div class="s-icon">🗺️</div>State-Level Summary</div>
+                <span class="section-tag">Top 15 States</span>
+            </div>
+            <table class="data-table">
+                <thead><tr><th>State</th><th>Count</th><th>Avg Risk</th><th>Approve Rate</th><th style="width:180px;">Risk Meter</th></tr></thead>
                 <tbody>
                     {% for s in state_summary %}
                     <tr>
-                        <td>{{ s.state }}</td>
-                        <td>{{ s.count }}</td>
-                        <td>{{ s.avg_risk }}</td>
-                        <td>{{ s.approve_pct }}%</td>
-                        <td style="width: 30%">
-                            <div class="risk-meter">
-                                <div class="fill" style="width: {{ (s.avg_risk * 100)|int }}%; background: {% if s.avg_risk < 0.35 %}#4caf50{% elif s.avg_risk < 0.60 %}#ffc107{% else %}#f44336{% endif %}"></div>
-                            </div>
-                        </td>
+                        <td style="font-weight:500;">{{ s.state }}</td>
+                        <td style="font-family:'JetBrains Mono',monospace;font-size:12px;">{{ s.count }}</td>
+                        <td><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:{% if s.avg_risk < 0.35 %}var(--green){% elif s.avg_risk < 0.60 %}var(--yellow){% else %}var(--red){% endif %};">{{ s.avg_risk }}</span></td>
+                        <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--green);">{{ s.approve_pct }}%</td>
+                        <td><div class="risk-bar" style="width:100%;"><div class="fill" style="width:{{ (s.avg_risk*100)|int }}%;background:{% if s.avg_risk < 0.35 %}var(--green){% elif s.avg_risk < 0.60 %}var(--yellow){% else %}var(--red){% endif %};"></div></div></td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
 
-        <!-- API Reference -->
-        <div class="section">
-            <h2>API Reference</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Endpoint</th>
-                        <th>Description</th>
-                        <th>Example</th>
-                    </tr>
-                </thead>
+        <!-- API -->
+        <div class="card fade-up d5">
+            <div class="section-header">
+                <div class="section-title"><div class="s-icon">⚡</div>API Reference</div>
+                <span class="section-tag">REST Endpoints</span>
+            </div>
+            <table class="data-table">
+                <thead><tr><th>Endpoint</th><th>Description</th><th>Try</th></tr></thead>
                 <tbody>
-                    <tr>
-                        <td><code>GET /api/summary</code></td>
-                        <td>Overall statistics</td>
-                        <td><a href="/api/summary">Try it →</a></td>
-                    </tr>
-                    <tr>
-                        <td><code>GET /api/commodities</code></td>
-                        <td>List all commodities with stats</td>
-                        <td><a href="/api/commodities">Try it →</a></td>
-                    </tr>
-                    <tr>
-                        <td><code>GET /api/scores?commodity=WHEAT</code></td>
-                        <td>Risk scores (filterable)</td>
-                        <td><a href="/api/scores?commodity=WHEAT&limit=5">Try it →</a></td>
-                    </tr>
-                    <tr>
-                        <td><code>GET /api/scores/WHEAT</code></td>
-                        <td>Scores for one commodity</td>
-                        <td><a href="/api/scores/WHEAT">Try it →</a></td>
-                    </tr>
-                    <tr>
-                        <td><code>GET /api/decisions</code></td>
-                        <td>Decision distribution by commodity</td>
-                        <td><a href="/api/decisions">Try it →</a></td>
-                    </tr>
+                    <tr><td><code>GET /api/summary</code></td><td style="color:var(--muted);">Overall portfolio statistics</td><td><a class="try-link" href="/api/summary">Try →</a></td></tr>
+                    <tr><td><code>GET /api/commodities</code></td><td style="color:var(--muted);">List all commodities with stats</td><td><a class="try-link" href="/api/commodities">Try →</a></td></tr>
+                    <tr><td><code>GET /api/scores?commodity=WHEAT</code></td><td style="color:var(--muted);">Risk scores (filterable)</td><td><a class="try-link" href="/api/scores?commodity=WHEAT&limit=5">Try →</a></td></tr>
+                    <tr><td><code>GET /api/scores/WHEAT</code></td><td style="color:var(--muted);">Scores for one commodity</td><td><a class="try-link" href="/api/scores/WHEAT">Try →</a></td></tr>
+                    <tr><td><code>POST /api/predict</code></td><td style="color:var(--muted);">Live LTV &amp; risk prediction</td><td><a class="try-link" href="/predict">UI →</a></td></tr>
                 </tbody>
             </table>
         </div>
     </div>
+</div>
 
-    <script>
-        // Commodity search filter
-        document.getElementById('commoditySearch').addEventListener('input', function() {
-            const query = this.value.toLowerCase();
-            const rows = document.querySelectorAll('#commodityTable tbody tr');
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                row.style.display = text.includes(query) ? '' : 'none';
-            });
+<script>
+    // Cool list filtering animation
+    document.getElementById('commoditySearch').addEventListener('input', function() {
+        const q = this.value.toLowerCase();
+        document.querySelectorAll('#commodityTable tbody tr').forEach(r => {
+            if(r.textContent.toLowerCase().includes(q)) {
+                r.style.display = '';
+                r.style.opacity = '1';
+            } else {
+                r.style.opacity = '0';
+                setTimeout(() => r.style.display = 'none', 200);
+            }
         });
-    </script>
+    });
+</script>
 </body>
 </html>

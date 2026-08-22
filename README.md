@@ -10,6 +10,18 @@ Agricultural commodity risk and lending analytics platform for post-harvest fina
 - Geo-based mandi resolution (nearest market by haversine distance)
 - Risk scoring and LTV recommendations (APPROVE / CONDITIONAL / REJECT)
 - Flask dashboard, JSON API, and interactive prediction form
+## How to Run (Quick Start)
+
+**Single verified command for Windows:**
+```powershell
+.\start_app.ps1
+```
+*(This script automatically sets the required PYTHONPATH and launches the local Flask dashboard at `http://127.0.0.1:5000`)*
+
+**Step-by-step manual setup:**
+1. Install requirements: `pip install -r requirements.txt`
+2. Create environment variables: copy `.env.example` to `.env` and fill in AWS credentials.
+3. Start the application: run `$env:PYTHONPATH="."; py -m src.api.app` in PowerShell.
 
 ## Architecture
 

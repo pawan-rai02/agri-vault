@@ -4,633 +4,590 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Predict LTV — AgriVault</title>
+    <meta name="description" content="Live risk scoring and loan-to-value prediction for agricultural commodities.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
-        .header { background: linear-gradient(135deg, #2d5016 0%, #4a7c23 100%); color: white; padding: 24px 32px; }
-        .header h1 { font-size: 24px; }
-        .header p { opacity: 0.85; font-size: 14px; margin-top: 4px; }
-        .header a { color: white; opacity: 0.8; font-size: 13px; text-decoration: none; }
-        .header a:hover { opacity: 1; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
-
-        .section { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 24px; }
-        .section h2 { font-size: 18px; margin-bottom: 16px; color: #2d5016; }
-
-        /* Form */
-        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-        @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
-        .form-group { display: flex; flex-direction: column; }
-        .form-group label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600; }
-        .form-group input, .form-group select { padding: 10px 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; }
-        .form-group input:focus, .form-group select:focus { outline: none; border-color: #4a7c23; }
-        .form-group .hint { font-size: 11px; color: #999; margin-top: 2px; }
-
-        .btn { padding: 12px 24px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-        .btn-primary { background: #4a7c23; color: white; }
-        .btn-primary:hover { background: #3d6a1c; }
-        .btn-primary:disabled { background: #a0c88a; cursor: not-allowed; }
-
-        /* Results */
-        .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
-        @media (max-width: 768px) { .results-grid { grid-template-columns: 1fr; } }
-
-        .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 20px; }
-        .kpi-card { background: #f9fbf7; border-radius: 10px; padding: 16px; border: 1px solid #e8f0e0; }
-        .kpi-card .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-        .kpi-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
-
-        .badge { display: inline-block; padding: 4px 14px; border-radius: 14px; font-size: 13px; font-weight: 700; }
-        .badge.approve { background: #e8f5e9; color: #2d8a4e; }
-        .badge.conditional { background: #fff8e1; color: #b8860b; }
-        .badge.reject { background: #fce4ec; color: #c0392b; }
-
-        /* Forecast chart */
-        .chart-container { position: relative; width: 100%; height: 280px; margin-top: 12px; }
-        canvas { width: 100% !important; height: 100% !important; }
-
-        /* Resolution info */
-        .resolution-info { background: #f0f7ff; border: 1px solid #d0e3f7; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #2c5aa0; margin-top: 12px; }
-
-        /* Error */
-        .error-box { background: #fce4ec; border: 1px solid #f5c6cb; border-radius: 8px; padding: 14px; color: #c0392b; margin-top: 16px; }
-
-        /* Explanation */
-        .explanation-table { width: 100%; font-size: 13px; }
-        .explanation-table td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; }
-        .explanation-table td:first-child { color: #666; font-weight: 500; }
-        .fi-badge {
-            display: inline-block;
-            background: #e8f5e9;
-            color: #2d5016;
-            border-radius: 10px;
-            padding: 1px 8px;
-            font-size: 11px;
-            font-weight: 600;
-            margin-left: 6px;
-            vertical-align: middle;
+        :root {
+            --bg-deep:     #050d1a;
+            --bg-card:     rgba(12,25,48,0.72);
+            --border:      rgba(56,130,255,0.18);
+            --border-glow: rgba(56,130,255,0.45);
+            --accent:      #3b82f6;
+            --accent2:     #06b6d4;
+            --green:       #10b981;
+            --yellow:      #f59e0b;
+            --red:         #ef4444;
+            --text:        #e2e8f0;
+            --muted:       #64748b;
+            --glow-g:      rgba(16,185,129,0.3);
+            --glow-b:      rgba(59,130,246,0.3);
         }
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Inter',sans-serif; background:var(--bg-deep); color:var(--text); min-height:100vh; overflow-x:hidden; }
+        
+        body::after {
+            content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+            background-image: linear-gradient(rgba(56,130,255,.035) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(56,130,255,.035) 1px, transparent 1px);
+            background-size:60px 60px;
+        }
+
+        /* Floating Orbs */
+        .orb { position:fixed; border-radius:50%; filter:blur(90px); pointer-events:none; z-index:0; animation:float 20s infinite alternate cubic-bezier(0.4, 0, 0.2, 1); opacity:0.5; }
+        .orb-1 { width:450px; height:450px; background:rgba(59,130,246,0.14); top:-100px; left:-50px; }
+        .orb-2 { width:400px; height:400px; background:rgba(16,185,129,0.1); bottom:-150px; right:10%; animation-delay:-8s; }
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(40px, -60px) scale(1.1); }
+            100% { transform: translate(-30px, -40px) scale(0.95); }
+        }
+
+        .navbar {
+            position:sticky; top:0; z-index:100;
+            display:flex; align-items:center; justify-content:space-between;
+            padding:0 32px; height:64px;
+            background:rgba(5,13,26,.88);
+            backdrop-filter:blur(20px);
+            border-bottom:1px solid var(--border);
+        }
+        .nav-brand { display:flex; align-items:center; gap:12px; font-size:18px; font-weight:700; color:var(--text); text-decoration:none; }
+        .logo-icon { width:36px; height:36px; background:linear-gradient(135deg,var(--green),var(--accent)); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow:0 0 20px var(--glow-g); animation: pulse-glow 3s infinite alternate; }
+        @keyframes pulse-glow { to { box-shadow: 0 0 35px var(--glow-b); } }
+
+        .nav-links { display:flex; gap:4px; }
+        .nav-link { padding:8px 16px; border-radius:8px; color:var(--muted); text-decoration:none; font-size:14px; font-weight:500; transition:all .3s ease; }
+        .nav-link:hover { color:var(--text); background:rgba(59,130,246,.12); transform:translateY(-1px); }
+        .nav-link.active { color:var(--accent); background:rgba(59,130,246,.1); }
+        .nav-back { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); text-decoration:none; transition:all .3s ease; }
+        .nav-back:hover { color:var(--text); transform: translateX(-4px); }
+        
+        .page { position:relative; z-index:1; }
+        .hero { padding:40px 32px 24px; max-width:1300px; margin:0 auto; }
+        .hero-eyebrow { font-size:11px; font-weight:600; letter-spacing:3px; color:var(--accent); text-transform:uppercase; margin-bottom:10px; }
+        .hero-title { font-size:36px; font-weight:800; background:linear-gradient(135deg,#fff 0%,rgba(255,255,255,.55) 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1.1; margin-bottom:8px; }
+        .hero-sub { font-size:14px; color:var(--muted); }
+        
+        .container { max-width:1300px; margin:0 auto; padding:0 32px 48px; }
+        
+        .card { background:var(--bg-card); border:1px solid var(--border); border-radius:16px; backdrop-filter:blur(16px); transition:all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .card:hover { transform: translateY(-4px); border-color:var(--border-glow); box-shadow:0 12px 40px rgba(59,130,246,.1); }
+        
+        .section-header { display:flex; align-items:center; justify-content:space-between; padding:20px 24px 16px; border-bottom:1px solid var(--border); }
+        .section-title { font-size:14px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:8px; }
+        .s-icon { width:28px; height:28px; background:rgba(59,130,246,.15); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; }
+        .section-tag { font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:var(--muted); background:rgba(100,116,139,.15); padding:3px 10px; border-radius:20px; }
+
+        /* FORM */
+        .form-body { padding:24px; }
+        .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+        @media(max-width:640px){ .form-grid{grid-template-columns:1fr;} }
+        .form-group { display:flex; flex-direction:column; gap:6px; }
+        .form-label { font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); }
+        .form-input, .form-select {
+            padding:11px 14px;
+            background:rgba(255,255,255,.05);
+            border:1px solid var(--border);
+            border-radius:10px;
+            color:var(--text);
+            font-family:'Inter',sans-serif; font-size:13px;
+            outline:none;
+            transition:all .3s ease;
+        }
+        .form-input:focus, .form-select:focus { border-color:var(--accent); box-shadow:0 0 0 4px rgba(59,130,246,.15); background:rgba(59,130,246,.05); }
+        .form-input::placeholder { color:var(--muted); }
+        .form-input[readonly] { opacity:.6; cursor:default; }
+        .form-hint { font-size:11px; color:var(--muted); }
+        .form-select { appearance:none; background-image:url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-repeat:no-repeat; background-position:right 12px center; background-size:16px; padding-right:36px; }
+        .form-select option { background:#0d1e38; color:var(--text); }
+        
+        .btn-row { margin-top:24px; display:flex; align-items:center; gap:12px; }
+        .btn {
+            padding:13px 28px; border:none; border-radius:10px;
+            font-family:'Inter',sans-serif; font-size:14px; font-weight:600;
+            cursor:pointer; transition:all .3s ease;
+            display:inline-flex; align-items:center; gap:8px;
+            position:relative; overflow:hidden;
+        }
+        .btn-primary {
+            background:linear-gradient(135deg, var(--accent), #2563eb);
+            color:white;
+            box-shadow:0 0 20px rgba(59,130,246,.3);
+        }
+        .btn-primary:hover { box-shadow:0 0 30px rgba(59,130,246,.6); transform:translateY(-2px) scale(1.02); }
+        .btn-primary:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+        .btn-spinner { display:none; width:16px; height:16px; border:2px solid rgba(255,255,255,.3); border-top-color:white; border-radius:50%; animation:spin .6s linear infinite; }
+        @keyframes spin { to{transform:rotate(360deg);} }
+
+        /* AUTOCOMPLETE */
+        .ac-wrap { position:relative; }
         .ac-dropdown {
-            display: none;
-            position: absolute;
-            top: 100%;
-            left: 0; right: 0;
-            background: white;
-            border: 1px solid #ddd;
-            border-top: none;
-            border-radius: 0 0 8px 8px;
-            max-height: 220px;
-            overflow-y: auto;
-            z-index: 1000;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            display:none; position:absolute; top:calc(100% + 4px); left:0; right:0;
+            background:rgba(12,25,48,.95); backdrop-filter:blur(10px);
+            border:1px solid var(--border-glow);
+            border-radius:10px; max-height:220px; overflow-y:auto; z-index:1000;
+            box-shadow:0 16px 40px rgba(0,0,0,.5);
         }
-        .ac-dropdown .ac-item {
-            padding: 9px 12px;
-            cursor: pointer;
-            font-size: 13px;
-            border-bottom: 1px solid #f5f5f5;
-            transition: background 0.1s;
-        }
-        .ac-dropdown .ac-item:hover,
-        .ac-dropdown .ac-item.active {
-            background: #f0f7e6;
-        }
-        .ac-dropdown .ac-item .ac-main {
-            color: #333;
-            font-weight: 500;
-        }
-        .ac-dropdown .ac-item .ac-sub {
-            color: #999;
-            font-size: 11px;
-            margin-top: 2px;
-        }
-        .ac-dropdown .ac-empty {
-            padding: 10px 12px;
-            color: #999;
-            font-size: 13px;
-        }
+        .ac-item { padding:10px 14px; cursor:pointer; border-bottom:1px solid var(--border); transition:all .2s ease; }
+        .ac-item:last-child { border-bottom:none; }
+        .ac-item:hover, .ac-item.active { background:rgba(59,130,246,.15); padding-left:20px; }
+        .ac-main { font-size:13px; color:var(--text); font-weight:500; }
+        .ac-sub { font-size:11px; color:var(--muted); margin-top:2px; }
+        .ac-empty { padding:12px 14px; font-size:13px; color:var(--muted); text-align:center; }
+
+        /* ERROR */
+        .error-box { background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3); border-radius:12px; padding:16px 20px; color:var(--red); margin-bottom:20px; font-size:13px; display:flex; align-items:flex-start; gap:10px; }
+        .error-box .err-icon { font-size:16px; flex-shrink:0; }
+
+        /* RESULTS */
+        .results-section { margin-top:0; }
+        .kpi-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:16px; margin-bottom:20px; }
+        .kpi-card { padding:20px 24px; position:relative; overflow:hidden; }
+        .kpi-card::before { content:''; position:absolute; top:0; left:0; width:100%; height:2px; background:linear-gradient(90deg,transparent,var(--accent),transparent); opacity:0; transition:opacity .3s; }
+        .kpi-card:hover::before { opacity:1; }
+        .kpi-card:hover .kpi-value { transform: scale(1.05) origin-left; }
+        .kpi-label { font-size:10px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+        .kpi-value { font-size:30px; font-weight:800; line-height:1; font-family:'JetBrains Mono',monospace; transition: transform 0.3s ease; }
+        .results-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+        @media(max-width:768px){ .results-grid{grid-template-columns:1fr;} }
+
+        /* CHART */
+        .chart-wrap { padding:20px 24px; }
+        canvas { width:100% !important; }
+
+        /* RESOLUTION */
+        .resolution-info { background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.2); border-radius:8px; padding:10px 14px; font-size:12px; color:var(--accent2); margin-top:12px; display:flex; align-items:center; gap:6px; }
+
+        /* BREAKDOWN TABLE */
+        .breakdown-body { padding:0; }
+        .breakdown-row { display:flex; align-items:center; padding:12px 24px; border-bottom:1px solid rgba(255,255,255,.04); transition:background 0.2s; }
+        .breakdown-row:last-child { border-bottom:none; }
+        .breakdown-row:hover { background:rgba(59,130,246,.05); }
+        .br-label { flex:1; font-size:13px; color:var(--muted); }
+        .br-value { font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--text); margin-right:8px; }
+        .fi-pill { font-size:10px; font-weight:700; background:rgba(16,185,129,.15); color:var(--green); border:1px solid rgba(16,185,129,.25); border-radius:20px; padding:2px 8px; }
+
+        /* BADGES */
+        .badge { display:inline-flex; align-items:center; gap:4px; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; }
+        .badge::before { content:''; width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+        .badge.approve     { background:rgba(16,185,129,.15); color:var(--green); border:1px solid rgba(16,185,129,.3); }
+        .badge.approve::before { background:var(--green); box-shadow:0 0 6px var(--green); }
+        .badge.conditional { background:rgba(245,158,11,.15); color:var(--yellow); border:1px solid rgba(245,158,11,.3); }
+        .badge.conditional::before { background:var(--yellow); }
+        .badge.reject      { background:rgba(239,68,68,.15); color:var(--red); border:1px solid rgba(239,68,68,.3); }
+        .badge.reject::before { background:var(--red); box-shadow:0 0 6px var(--red); }
+
+        ::-webkit-scrollbar { width:6px; }
+        ::-webkit-scrollbar-track { background:transparent; }
+        ::-webkit-scrollbar-thumb { background:rgba(59,130,246,.3); border-radius:3px; }
+        
+        .fade-up { opacity:0; transform:translateY(24px); animation:fadeUp .6s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        @keyframes fadeUp { to{opacity:1;transform:translateY(0);} }
+        .d1{animation-delay:.05s} .d2{animation-delay:.15s} .d3{animation-delay:.25s}
     </style>
 </head>
 <body>
-    <div class="header">
-        <a href="/">← Back to Dashboard</a>
-        <h1>🌾 Predict LTV</h1>
-        <p>Live risk scoring and loan-to-value prediction for agricultural commodities</p>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+<nav class="navbar">
+    <a class="nav-brand" href="/">
+        <div class="logo-icon">🌾</div>
+        AgriVault
+    </a>
+    <div class="nav-links">
+        <a href="/" class="nav-link">Dashboard</a>
+        <a href="/predict" class="nav-link active">Predict LTV</a>
+    </div>
+    <a class="nav-back" href="/">← Dashboard</a>
+</nav>
+
+<div class="page">
+    <div class="hero fade-up">
+        <p class="hero-eyebrow">AI Prediction Engine</p>
+        <h1 class="hero-title">Live Risk &amp; LTV<br>Prediction</h1>
+        <p class="hero-sub">Real-time commodity risk scoring powered by Quantile GBM and NASA satellite data.</p>
     </div>
 
     <div class="container">
-        <!-- Prediction Form -->
-        <div class="section">
-            <h2>Enter Details</h2>
-
-            <form id="predictForm">
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label for="commodity">Commodity *</label>
-                        <input type="text" id="commodity" name="commodity" placeholder="e.g. WHEAT" required>
-                        <span class="hint">UPPERCASE preferred (e.g. WHEAT, TOMATO, ONION)</span>
+        <!-- Form -->
+        <div class="card fade-up d1" style="margin-bottom:20px;">
+            <div class="section-header">
+                <div class="section-title"><div class="s-icon">🔮</div>Prediction Input</div>
+                <span class="section-tag">Required Fields Marked *</span>
+            </div>
+            <div class="form-body">
+                <form id="predictForm">
+                    <div class="form-grid">
+                        <div class="form-group ac-wrap">
+                            <label class="form-label" for="commodity">Commodity *</label>
+                            <input type="text" id="commodity" name="commodity" class="form-input" placeholder="Type to search commodity..." required autocomplete="off">
+                            <div id="commodityDropdown" class="ac-dropdown"></div>
+                            <span class="form-hint">e.g. WHEAT, TOMATO</span>
+                        </div>
+                        <div class="form-group ac-wrap">
+                            <label class="form-label" for="state">State *</label>
+                            <input type="text" id="state" name="state" class="form-input" placeholder="Type to search states..." required autocomplete="off">
+                            <div id="stateDropdown" class="ac-dropdown"></div>
+                            <span class="form-hint">Start typing — e.g. "u" → Uttar Pradesh</span>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="district">District</label>
+                            <input type="text" id="district" name="district" class="form-input" placeholder="e.g. PUNE (optional)">
+                        </div>
+                        <div class="form-group ac-wrap">
+                            <label class="form-label" for="market">Market / Mandi</label>
+                            <input type="text" id="market" name="market" class="form-input" placeholder="Type to search mandis..." autocomplete="off">
+                            <div id="marketDropdown" class="ac-dropdown"></div>
+                            <span class="form-hint">Start typing — e.g. "luck" → Lucknow</span>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="quantity_kg">Quantity (kg)</label>
+                            <input type="number" id="quantity_kg" name="quantity_kg" class="form-input" placeholder="e.g. 5000" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="warehouse_grade">Warehouse Grade</label>
+                            <select id="warehouse_grade" name="warehouse_grade" class="form-select">
+                                <option value="A">A — Premium (minimal risk)</option>
+                                <option value="B" selected>B — Standard</option>
+                                <option value="C">C — Basic (high quality risk)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="requested_loan_amount">Requested Loan (₹)</label>
+                            <input type="number" id="requested_loan_amount" name="requested_loan_amount" class="form-input" placeholder="e.g. 100000" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="latitude">Latitude</label>
+                            <input type="number" id="latitude" name="latitude" class="form-input" placeholder="Auto-filled from mandi" step="0.0001" min="-90" max="90" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="longitude">Longitude</label>
+                            <input type="number" id="longitude" name="longitude" class="form-input" placeholder="Auto-filled from mandi" step="0.0001" min="-180" max="180" readonly>
+                        </div>
                     </div>
-                    <div class="form-group" style="position: relative;">
-                        <label for="state">State *</label>
-                        <input type="text" id="state" name="state" placeholder="Type to search states..." required autocomplete="off">
-                        <div id="stateDropdown" class="ac-dropdown"></div>
-                        <span class="hint">Start typing to search (e.g. u → Uttar Pradesh)</span>
+                    <div class="btn-row">
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <span id="btnIcon">🔍</span>
+                            <span id="btnText">Get Prediction</span>
+                            <span class="btn-spinner" id="btnSpinner"></span>
+                        </button>
                     </div>
-                    <div class="form-group">
-                        <label for="district">District</label>
-                        <input type="text" id="district" name="district" placeholder="e.g. PUNE (optional)">
-                    </div>
-                    <div class="form-group" style="position: relative;">
-                        <label for="market">Market / Mandi</label>
-                        <input type="text" id="market" name="market" placeholder="Type to search mandis..." autocomplete="off">
-                        <div id="marketDropdown" class="ac-dropdown"></div>
-                        <span class="hint">Start typing to search (e.g. luck → Lucknow)</span>
-                    </div>
-                    <div class="form-group">
-                        <label for="quantity_kg">Quantity (kg)</label>
-                        <input type="number" id="quantity_kg" name="quantity_kg" placeholder="e.g. 5000" min="0">
-                    </div>
-                    <div class="form-group">
-                        <label for="warehouse_grade">Warehouse Grade</label>
-                        <select id="warehouse_grade" name="warehouse_grade">
-                            <option value="A">A — Best</option>
-                            <option value="B" selected>B — Standard</option>
-                            <option value="C">C — Basic</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="requested_loan_amount">Requested Loan (₹)</label>
-                        <input type="number" id="requested_loan_amount" name="requested_loan_amount" placeholder="e.g. 100000" min="0">
-                    </div>
-                    <div class="form-group">
-                        <label for="latitude">Latitude</label>
-                        <input type="number" id="latitude" name="latitude" placeholder="Auto-filled from mandi" step="0.0001" min="-90" max="90" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label for="longitude">Longitude</label>
-                        <input type="number" id="longitude" name="longitude" placeholder="Auto-filled from mandi" step="0.0001" min="-180" max="180" readonly>
-                    </div>
-                </div>
-                <div style="margin-top: 20px;">
-                    <button type="submit" class="btn btn-primary" id="submitBtn">🔍 Get Prediction</button>
-                </div>
-            </form>
+                </form>
+            </div>
         </div>
 
-        <!-- Error Display -->
-        <div id="errorBox" class="error-box" style="display: none;"></div>
+        <!-- Error -->
+        <div id="errorBox" class="error-box" style="display:none;">
+            <span class="err-icon">⚠</span>
+            <span id="errorText"></span>
+        </div>
 
         <!-- Results -->
-        <div id="results" style="display: none;">
-            <!-- KPI Cards -->
-            <div class="kpi-row">
-                <div class="kpi-card">
-                    <div class="label">Risk Score</div>
-                    <div class="value" id="riskScore">—</div>
+        <div id="results" class="results-section" style="display:none;">
+            <!-- KPI Row -->
+            <div class="kpi-row fade-up">
+                <div class="card kpi-card">
+                    <div class="kpi-label">Risk Score</div>
+                    <div class="kpi-value" id="riskScore">—</div>
                 </div>
-                <div class="kpi-card">
-                    <div class="label">Decision</div>
-                    <div class="value" id="decision">—</div>
+                <div class="card kpi-card">
+                    <div class="kpi-label">Decision</div>
+                    <div class="kpi-value" id="decision" style="font-size:18px; margin-top:4px;">—</div>
                 </div>
-                <div class="kpi-card">
-                    <div class="label">Recommended LTV</div>
-                    <div class="value" id="ltvValue">—</div>
+                <div class="card kpi-card">
+                    <div class="kpi-label">Recommended LTV</div>
+                    <div class="kpi-value" id="ltvValue" style="color:var(--accent2);">—</div>
                 </div>
-                <div class="kpi-card">
-                    <div class="label">Max Loan Amount</div>
-                    <div class="value" id="maxLoan">—</div>
+                <div class="card kpi-card">
+                    <div class="kpi-label">Max Loan</div>
+                    <div class="kpi-value" id="maxLoan" style="color:var(--green);font-size:22px;">—</div>
                 </div>
             </div>
 
             <div class="results-grid">
-                <!-- Forecast Band Chart -->
-                <div class="section">
-                    <h2>Price Forecast</h2>
-                    <div class="chart-container">
-                        <canvas id="forecastChart"></canvas>
+                <!-- Forecast Chart -->
+                <div class="card fade-up" style="animation-delay: 0.1s;">
+                    <div class="section-header">
+                        <div class="section-title"><div class="s-icon">📈</div>Price Forecast</div>
+                        <span class="section-tag" id="forecastMethod">—</span>
                     </div>
-                    <div id="resolutionInfo" class="resolution-info" style="display: none;"></div>
+                    <div class="chart-wrap">
+                        <canvas id="forecastChart" style="height:260px;"></canvas>
+                        <div id="resolutionInfo" class="resolution-info" style="display:none;"></div>
+                    </div>
                 </div>
 
-                <!-- Risk Explanation -->
-                <div class="section">
-                    <h2>Risk Breakdown</h2>
-                    <table class="explanation-table" id="explanationTable">
-                        <tbody></tbody>
-                    </table>
+                <!-- Risk Breakdown -->
+                <div class="card fade-up" style="animation-delay: 0.2s;">
+                    <div class="section-header">
+                        <div class="section-title"><div class="s-icon">🧮</div>Risk Breakdown</div>
+                        <span class="section-tag">Weighted Components</span>
+                    </div>
+                    <div class="breakdown-body" id="breakdownBody"></div>
                 </div>
             </div>
         </div>
     </div>
+</div>
 
-    <script>
-        // ── Simple canvas chart for forecast band ──────────────────────
-        function drawForecastChart(canvasId, forecast) {
-            const canvas = document.getElementById(canvasId);
-            const ctx = canvas.getContext('2d');
-            const dpr = window.devicePixelRatio || 1;
+<script>
+// ── Forecast Chart ──────────────────────────────────────────────────────────
+function drawForecastChart(canvasId, forecast) {
+    const canvas = document.getElementById(canvasId);
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const W = rect.width; const H = 260;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.height = H + 'px';
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
 
-            // Set canvas size
-            const rect = canvas.parentElement.getBoundingClientRect();
-            canvas.width = rect.width * dpr;
-            canvas.height = rect.height * dpr;
-            ctx.scale(dpr, dpr);
-            const W = rect.width;
-            const H = rect.height;
+    const horizons = ['7d','15d','30d'];
+    const highs = horizons.map(h => forecast[h]?.high).filter(v => v != null);
+    const lows  = horizons.map(h => forecast[h]?.low).filter(v => v != null);
+    const meds  = horizons.map(h => forecast[h]?.median).filter(v => v != null);
+    if (!meds.length) return;
 
-            ctx.clearRect(0, 0, W, H);
+    const all = [...highs, ...lows, ...meds];
+    const mn = Math.min(...all) * .94; const mx = Math.max(...all) * 1.06;
+    const range = mx - mn || 1;
+    const pad = {t:36, r:24, b:44, l:64};
+    const cW = W - pad.l - pad.r; const cH = H - pad.t - pad.b;
+    const xP = i => pad.l + (i / (horizons.length-1)) * cW;
+    const yP = v => pad.t + cH - ((v - mn) / range) * cH;
 
-            const horizons = ['7d', '15d', '30d'];
-            const highs = horizons.map(h => forecast[h]?.high).filter(v => v != null);
-            const lows = horizons.map(h => forecast[h]?.low).filter(v => v != null);
-            const medians = horizons.map(h => forecast[h]?.median).filter(v => v != null);
+    // Grid lines
+    for (let t=0; t<=4; t++) {
+        const y = yP(mn + range*t/4);
+        ctx.beginPath(); ctx.strokeStyle = 'rgba(255,255,255,.05)'; ctx.lineWidth=1;
+        ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
+        ctx.fillStyle='#64748b'; ctx.font='11px JetBrains Mono, monospace'; ctx.textAlign='right';
+        ctx.fillText('₹'+(mn+range*t/4).toFixed(0), pad.l-8, y+4);
+    }
 
-            if (medians.length === 0) return;
+    // Confidence band
+    ctx.beginPath();
+    highs.forEach((v,i) => i===0 ? ctx.moveTo(xP(i),yP(v)) : ctx.lineTo(xP(i),yP(v)));
+    lows.slice().reverse().forEach((v,i) => ctx.lineTo(xP(lows.length-1-i), yP(v)));
+    ctx.closePath();
+    ctx.fillStyle='rgba(59,130,246,.12)'; ctx.fill();
 
-            const allVals = [...highs, ...lows, ...medians];
-            const minVal = Math.min(...allVals) * 0.95;
-            const maxVal = Math.max(...allVals) * 1.05;
-            const range = maxVal - minVal || 1;
+    // High line
+    ctx.beginPath(); ctx.strokeStyle='#10b981'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+    highs.forEach((v,i) => i===0 ? ctx.moveTo(xP(i),yP(v)) : ctx.lineTo(xP(i),yP(v)));
+    ctx.stroke(); ctx.setLineDash([]);
 
-            const pad = { top: 30, right: 30, bottom: 40, left: 60 };
-            const chartW = W - pad.left - pad.right;
-            const chartH = H - pad.top - pad.bottom;
+    // Low line
+    ctx.beginPath(); ctx.strokeStyle='#ef4444'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+    lows.forEach((v,i) => i===0 ? ctx.moveTo(xP(i),yP(v)) : ctx.lineTo(xP(i),yP(v)));
+    ctx.stroke(); ctx.setLineDash([]);
 
-            function xPos(i) { return pad.left + (i / (horizons.length - 1)) * chartW; }
-            function yPos(v) { return pad.top + chartH - ((v - minVal) / range) * chartH; }
+    // Median line (glowing)
+    ctx.shadowColor='rgba(59,130,246,.6)'; ctx.shadowBlur=10;
+    ctx.beginPath(); ctx.strokeStyle='#3b82f6'; ctx.lineWidth=2.5;
+    meds.forEach((v,i) => i===0 ? ctx.moveTo(xP(i),yP(v)) : ctx.lineTo(xP(i),yP(v)));
+    ctx.stroke(); ctx.shadowBlur=0;
 
-            // ── Draw confidence band (high → low fill) ──
-            if (highs.length === lows.length && highs.length > 1) {
-                ctx.beginPath();
-                for (let i = 0; i < highs.length; i++) {
-                    const x = xPos(i);
-                    if (i === 0) ctx.moveTo(x, yPos(highs[i]));
-                    else ctx.lineTo(x, yPos(highs[i]));
-                }
-                for (let i = lows.length - 1; i >= 0; i--) {
-                    ctx.lineTo(xPos(i), yPos(lows[i]));
-                }
-                ctx.closePath();
-                ctx.fillStyle = 'rgba(74, 124, 35, 0.15)';
-                ctx.fill();
-            }
+    // Dots + labels
+    meds.forEach((m,i) => {
+        const x=xP(i), y=yP(m);
+        ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2);
+        ctx.fillStyle='#3b82f6'; ctx.shadowColor='rgba(59,130,246,.8)'; ctx.shadowBlur=8;
+        ctx.fill(); ctx.shadowBlur=0;
+        ctx.fillStyle='#e2e8f0'; ctx.font='bold 11px JetBrains Mono,monospace'; ctx.textAlign='center';
+        ctx.fillText('₹'+m.toFixed(0), x, y-12);
+        ctx.fillStyle='#64748b'; ctx.font='12px Inter,sans-serif';
+        ctx.fillText(horizons[i], x, H-pad.b+18);
+    });
 
-            // ── Draw high line ──
-            if (highs.length > 1) {
-                ctx.beginPath();
-                ctx.strokeStyle = '#4caf50';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 3]);
-                for (let i = 0; i < highs.length; i++) {
-                    if (i === 0) ctx.moveTo(xPos(i), yPos(highs[i]));
-                    else ctx.lineTo(xPos(i), yPos(highs[i]));
-                }
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
+    // Legend
+    const lY = 16; const lX = pad.l;
+    const drawLeg = (color, dash, label, x) => {
+        ctx.strokeStyle=color; ctx.lineWidth=2; ctx.setLineDash(dash);
+        ctx.beginPath(); ctx.moveTo(x,lY); ctx.lineTo(x+18,lY); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle='#64748b'; ctx.font='11px Inter,sans-serif'; ctx.textAlign='left';
+        ctx.fillText(label, x+22, lY+4);
+    };
+    drawLeg('#10b981',[4,3],'High (q90)', lX);
+    drawLeg('#3b82f6',[],'Median (q50)', lX+80);
+    drawLeg('#ef4444',[4,3],'Low (q10)', lX+168);
+}
 
-            // ── Draw median line ──
-            ctx.beginPath();
-            ctx.strokeStyle = '#2d5016';
-            ctx.lineWidth = 3;
-            for (let i = 0; i < medians.length; i++) {
-                if (i === 0) ctx.moveTo(xPos(i), yPos(medians[i]));
-                else ctx.lineTo(xPos(i), yPos(medians[i]));
-            }
-            ctx.stroke();
+// ── Commodity Autocomplete ───────────────────────────────────────────────────
+let commoditiesList = [];
+fetch('/api/commodities').then(r=>r.json()).then(d=>{
+    if(d.data) commoditiesList = d.data.map(c=>c.commodity);
+}).catch(console.error);
 
-            // ── Draw low line ──
-            if (lows.length > 1) {
-                ctx.beginPath();
-                ctx.strokeStyle = '#f44336';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 3]);
-                for (let i = 0; i < lows.length; i++) {
-                    if (i === 0) ctx.moveTo(xPos(i), yPos(lows[i]));
-                    else ctx.lineTo(xPos(i), yPos(lows[i]));
-                }
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
+const cmdInput = document.getElementById('commodity');
+const cmdDD = document.getElementById('commodityDropdown');
+cmdInput.addEventListener('input', function() {
+    const q = this.value.trim().toLowerCase();
+    if(q.length < 1) { cmdDD.style.display='none'; return; }
+    const matches = commoditiesList.filter(c => c.toLowerCase().includes(q));
+    if(!matches.length) { cmdDD.innerHTML='<div class="ac-empty">No matching commodity</div>'; cmdDD.style.display='block'; return; }
+    cmdDD.innerHTML = matches.map(m=>`<div class="ac-item" data-val="${m}"><div class="ac-main">${m}</div></div>`).join('');
+    cmdDD.querySelectorAll('.ac-item').forEach(el=>{
+        el.onclick = () => { cmdInput.value=el.dataset.val; cmdDD.style.display='none'; };
+    });
+    cmdDD.style.display='block';
+});
+cmdInput.addEventListener('focus', function(){ if(this.value.trim().length>=1) this.dispatchEvent(new Event('input')); });
 
-            // ── Draw dots + labels ──
-            for (let i = 0; i < horizons.length; i++) {
-                const x = xPos(i);
-                const m = forecast[horizons[i]]?.median;
-                if (m != null) {
-                    ctx.beginPath();
-                    ctx.arc(x, yPos(m), 5, 0, Math.PI * 2);
-                    ctx.fillStyle = '#2d5016';
-                    ctx.fill();
-                    ctx.fillStyle = '#333';
-                    ctx.font = '11px sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('₹' + m.toFixed(0), x, yPos(m) - 10);
-                }
-            }
+// ── State Autocomplete ───────────────────────────────────────────────────────
+const stateInput = document.getElementById('state');
+const stateDD = document.getElementById('stateDropdown');
+let stateTimer = null;
+stateInput.addEventListener('input', function() {
+    const q = this.value.trim(); clearTimeout(stateTimer);
+    if (q.length < 1) { stateDD.style.display='none'; return; }
+    stateTimer = setTimeout(async () => {
+        try {
+            const r = await fetch(`/api/search-states?q=${encodeURIComponent(q)}&limit=10`);
+            const states = await r.json();
+            if (!states.length) { stateDD.innerHTML='<div class="ac-empty">No states found</div>'; stateDD.style.display='block'; return; }
+            stateDD.innerHTML = states.map(s=>`<div class="ac-item" data-val="${s}"><div class="ac-main">${s}</div></div>`).join('');
+            stateDD.querySelectorAll('.ac-item').forEach(el=>{ el.onclick=()=>{ stateInput.value=el.dataset.val; stateDD.style.display='none'; document.getElementById('market').value=''; document.getElementById('latitude').value=''; document.getElementById('longitude').value=''; }; });
+            stateDD.style.display='block';
+        } catch(e){ console.error(e); }
+    }, 200);
+});
+stateInput.addEventListener('focus', function(){ if (this.value.trim().length>=1) this.dispatchEvent(new Event('input')); });
 
-            // ── X-axis labels ──
-            ctx.fillStyle = '#666';
-            ctx.font = '12px sans-serif';
-            ctx.textAlign = 'center';
-            for (let i = 0; i < horizons.length; i++) {
-                ctx.fillText(horizons[i], xPos(i), H - pad.bottom + 20);
-            }
+// ── Mandi Autocomplete ───────────────────────────────────────────────────────
+const marketInput = document.getElementById('market');
+const marketDD = document.getElementById('marketDropdown');
+let marketTimer = null;
+marketInput.addEventListener('input', function() {
+    const q = this.value.trim(); clearTimeout(marketTimer);
+    document.getElementById('latitude').value=''; document.getElementById('longitude').value='';
+    if (q.length < 1) { marketDD.style.display='none'; return; }
+    const state = stateInput.value.trim();
+    const params = new URLSearchParams({q, limit:15});
+    if (state) params.set('state', state);
+    marketTimer = setTimeout(async () => {
+        try {
+            const r = await fetch(`/api/search-mandi?${params}`);
+            const mandis = await r.json();
+            if (!mandis.length) { marketDD.innerHTML='<div class="ac-empty">No mandis found</div>'; marketDD.style.display='block'; return; }
+            marketDD.innerHTML = mandis.map((m,i)=>`<div class="ac-item" data-idx="${i}"><div class="ac-main">${m.mandi_name}</div><div class="ac-sub">${m.district}, ${m.state} · ${m.latitude}, ${m.longitude}</div></div>`).join('');
+            marketDD.querySelectorAll('.ac-item').forEach(el=>{ el.onclick=()=>{ const m=mandis[parseInt(el.dataset.idx)]; marketInput.value=m.mandi_name; stateInput.value=m.state; document.getElementById('district').value=m.district||''; document.getElementById('latitude').value=m.latitude||''; document.getElementById('longitude').value=m.longitude||''; marketDD.style.display='none'; }; });
+            marketDD.style.display='block';
+        } catch(e){ console.error(e); }
+    }, 200);
+});
+marketInput.addEventListener('focus', function(){ if (this.value.trim().length>=1) this.dispatchEvent(new Event('input')); });
 
-            // ── Y-axis ──
-            ctx.fillStyle = '#999';
-            ctx.font = '11px sans-serif';
-            ctx.textAlign = 'right';
-            const nTicks = 5;
-            for (let t = 0; t <= nTicks; t++) {
-                const val = minVal + (range * t / nTicks);
-                const y = yPos(val);
-                ctx.fillText('₹' + val.toFixed(0), pad.left - 8, y + 4);
-                // Grid line
-                ctx.beginPath();
-                ctx.strokeStyle = '#f0f0f0';
-                ctx.lineWidth = 1;
-                ctx.moveTo(pad.left, y);
-                ctx.lineTo(W - pad.right, y);
-                ctx.stroke();
-            }
+document.addEventListener('click', e => {
+    if (!cmdInput.contains(e.target) && !cmdDD.contains(e.target)) cmdDD.style.display='none';
+    if (!stateInput.contains(e.target) && !stateDD.contains(e.target)) stateDD.style.display='none';
+    if (!marketInput.contains(e.target) && !marketDD.contains(e.target)) marketDD.style.display='none';
+});
 
-            // ── Legend ──
-            ctx.font = '11px sans-serif';
-            const legendY = 14;
-            const legendX = pad.left;
-            // High
-            ctx.strokeStyle = '#4caf50';
-            ctx.setLineDash([5, 3]);
-            ctx.beginPath();
-            ctx.moveTo(legendX, legendY);
-            ctx.lineTo(legendX + 20, legendY);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.fillStyle = '#666';
-            ctx.textAlign = 'left';
-            ctx.fillText('High (q90)', legendX + 24, legendY + 4);
-            // Median
-            ctx.strokeStyle = '#2d5016';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(legendX + 90, legendY);
-            ctx.lineTo(legendX + 110, legendY);
-            ctx.stroke();
-            ctx.fillText('Median (q50)', legendX + 114, legendY + 4);
-            // Low
-            ctx.strokeStyle = '#f44336';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([5, 3]);
-            ctx.beginPath();
-            ctx.moveTo(legendX + 190, legendY);
-            ctx.lineTo(legendX + 210, legendY);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.fillText('Low (q10)', legendX + 214, legendY + 4);
+// ── Form submit ──────────────────────────────────────────────────────────────
+document.getElementById('predictForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    const spinner = document.getElementById('btnSpinner');
+    const btnText = document.getElementById('btnText');
+    const btnIcon = document.getElementById('btnIcon');
+    const errorBox = document.getElementById('errorBox');
+    const results = document.getElementById('results');
+
+    btn.disabled=true; spinner.style.display='block'; btnText.textContent='Predicting...'; btnIcon.style.display='none';
+    errorBox.style.display='none'; 
+    results.style.display='none'; // Reset to retrigger animations
+
+    const body = {};
+    ['commodity','state','district','market','quantity_kg','warehouse_grade','requested_loan_amount','latitude','longitude'].forEach(f => {
+        const v = document.getElementById(f).value.trim();
+        if (v) body[f] = ['quantity_kg','requested_loan_amount','latitude','longitude'].includes(f) ? parseFloat(v) : v;
+    });
+
+    try {
+        const resp = await fetch('/api/predict', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+        const data = await resp.json();
+
+        if (!resp.ok) {
+            document.getElementById('errorText').textContent = data.error || `Request failed (${resp.status})`;
+            errorBox.style.display='flex'; return;
         }
 
-        // ── State Autocomplete ─────────────────────────────────────────
-        const stateInput = document.getElementById('state');
-        const stateDropdown = document.getElementById('stateDropdown');
-        let stateTimeout = null;
+        // Risk score
+        const rs = document.getElementById('riskScore');
+        rs.textContent = data.risk_score.toFixed(3);
+        rs.style.color = data.risk_score < 0.35 ? 'var(--green)' : data.risk_score < 0.60 ? 'var(--yellow)' : 'var(--red)';
+        rs.style.textShadow = data.risk_score < 0.35 ? '0 0 20px var(--glow-g)' : '';
 
-        stateInput.addEventListener('input', function() {
-            const q = this.value.trim();
-            clearTimeout(stateTimeout);
-            if (q.length < 1) { stateDropdown.style.display = 'none'; return; }
-            stateTimeout = setTimeout(async () => {
-                try {
-                    const resp = await fetch(`/api/search-states?q=${encodeURIComponent(q)}&limit=10`);
-                    const states = await resp.json();
-                    if (states.length === 0) {
-                        stateDropdown.innerHTML = '<div class="ac-empty">No states found</div>';
-                        stateDropdown.style.display = 'block';
-                        return;
-                    }
-                    stateDropdown.innerHTML = states.map(s =>
-                        `<div class="ac-item" data-val="${s}"><div class="ac-main">${s}</div></div>`
-                    ).join('');
-                    stateDropdown.querySelectorAll('.ac-item').forEach(el => {
-                        el.onclick = () => {
-                            stateInput.value = el.dataset.val;
-                            stateDropdown.style.display = 'none';
-                            // Clear market when state changes
-                            document.getElementById('market').value = '';
-                            document.getElementById('latitude').value = '';
-                            document.getElementById('longitude').value = '';
-                        };
-                    });
-                    stateDropdown.style.display = 'block';
-                } catch(e) { console.error(e); }
-            }, 200);
-        });
-        stateInput.addEventListener('focus', function() { if (this.value.trim().length >= 1) this.dispatchEvent(new Event('input')); });
+        // Decision badge
+        document.getElementById('decision').innerHTML = `<span class="badge ${data.decision.toLowerCase()}">${data.decision}</span>`;
 
-        // ── Market / Mandi Autocomplete ─────────────────────────────────
-        const marketInput = document.getElementById('market');
-        const marketDropdown = document.getElementById('marketDropdown');
-        let marketTimeout = null;
-        let selectedMandi = null;
+        // LTV & Loan
+        document.getElementById('ltvValue').textContent = data.recommended_ltv_pct + '%';
+        document.getElementById('maxLoan').textContent = data.recommended_loan_amount != null ? '₹' + data.recommended_loan_amount.toLocaleString('en-IN') : '—';
 
-        marketInput.addEventListener('input', function() {
-            const q = this.value.trim();
-            clearTimeout(marketTimeout);
-            selectedMandi = null; // reset if user types again
-            document.getElementById('latitude').value = '';
-            document.getElementById('longitude').value = '';
-            if (q.length < 1) { marketDropdown.style.display = 'none'; return; }
+        // Forecast method tag
+        const fmEl = document.getElementById('forecastMethod');
+        fmEl.textContent = data.forecast_method === 'quantile_gbm' ? 'Quantile GBM ✦' : 'Statistical Fallback';
 
-            const state = stateInput.value.trim();
-            const params = new URLSearchParams({ q, limit: 15 });
-            if (state) params.set('state', state);
+        // Resolution info
+        const resInfo = document.getElementById('resolutionInfo');
+        let resText = '';
+        if (data.resolution_type && data.resolution_type !== 'exact_match') resText += `📍 ${data.resolution_type.replace(/_/g,' ')}: ${data.mandi_id}${data.mandi_distance_km ? ' ('+data.mandi_distance_km+' km)' : ''}`;
+        if (data.nasa_weather_used) resText += (resText?' · ':'') + '🛰 NASA live weather';
+        if (data.used_snapshot) resText += (resText?' · ':'') + '📊 Snapshot data';
+        resInfo.textContent = resText; resInfo.style.display = resText ? 'flex' : 'none';
 
-            marketTimeout = setTimeout(async () => {
-                try {
-                    const resp = await fetch(`/api/search-mandi?${params}`);
-                    const mandis = await resp.json();
-                    if (mandis.length === 0) {
-                        marketDropdown.innerHTML = '<div class="ac-empty">No mandis found</div>';
-                        marketDropdown.style.display = 'block';
-                        return;
-                    }
-                    marketDropdown.innerHTML = mandis.map((m, i) =>
-                        `<div class="ac-item" data-idx="${i}">
-                            <div class="ac-main">${m.mandi_name}</div>
-                            <div class="ac-sub">${m.district}, ${m.state} &middot; ${m.latitude}, ${m.longitude}</div>
-                        </div>`
-                    ).join('');
-                    marketDropdown.querySelectorAll('.ac-item').forEach(el => {
-                        el.onclick = () => {
-                            const m = mandis[parseInt(el.dataset.idx)];
-                            marketInput.value = m.mandi_name;
-                            stateInput.value = m.state;
-                            document.getElementById('district').value = m.district || '';
-                            document.getElementById('latitude').value = m.latitude || '';
-                            document.getElementById('longitude').value = m.longitude || '';
-                            selectedMandi = m;
-                            marketDropdown.style.display = 'none';
-                        };
-                    });
-                    marketDropdown.style.display = 'block';
-                } catch(e) { console.error(e); }
-            }, 200);
-        });
-        marketInput.addEventListener('focus', function() { if (this.value.trim().length >= 1) this.dispatchEvent(new Event('input')); });
+        // Chart
+        if (data.forecast && Object.keys(data.forecast).length) setTimeout(()=>drawForecastChart('forecastChart', data.forecast), 50);
 
-        // ── Close dropdowns on outside click ────────────────────────────
-        document.addEventListener('click', function(e) {
-            if (!stateInput.contains(e.target) && !stateDropdown.contains(e.target))
-                stateDropdown.style.display = 'none';
-            if (!marketInput.contains(e.target) && !marketDropdown.contains(e.target))
-                marketDropdown.style.display = 'none';
-        });
-
-        // ── Form submission ────────────────────────────────────────────
-        document.getElementById('predictForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-
-            const btn = document.getElementById('submitBtn');
-            const errorBox = document.getElementById('errorBox');
-            const resultsDiv = document.getElementById('results');
-
-            btn.disabled = true;
-            btn.textContent = '⏳ Predicting...';
-            errorBox.style.display = 'none';
-            resultsDiv.style.display = 'none';
-
-            const body = {};
-            const fields = ['commodity', 'state', 'district', 'market', 'quantity_kg', 'warehouse_grade', 'requested_loan_amount', 'latitude', 'longitude'];
-            for (const f of fields) {
-                const el = document.getElementById(f);
-                const val = el.value.trim();
-                if (val) {
-                    body[f] = (f === 'quantity_kg' || f === 'requested_loan_amount' || f === 'latitude' || f === 'longitude') ? parseFloat(val) : val;
-                }
+        // Breakdown
+        const breakdown = document.getElementById('breakdownBody');
+        breakdown.innerHTML = '';
+        if (data.explanation?.components) {
+            const c = data.explanation.components;
+            const fi = data.explanation.feature_importance || {};
+            const rows = [
+                ['Price Volatility (CV)', c.price_cv?.toFixed(4), fi.price_cv],
+                ['Forecast Uncertainty', c.forecast_uncertainty?.toFixed(4), fi.forecast_uncertainty],
+                ['Warehouse Count', c.n_warehouses, fi.warehouse_gap],
+                ['Warehouse Grade', c.warehouse_grade, fi.warehouse_grade],
+                ['Commodity Risk Tier', c.commodity_tier?.toFixed(2), fi.commodity_tier],
+                ['Season', c.season, fi.season_risk],
+            ];
+            rows.forEach(([label, value, imp]) => {
+                const div = document.createElement('div');
+                div.className='breakdown-row';
+                div.innerHTML=`<span class="br-label">${label}</span><span class="br-value">${value??'—'}</span>${imp!=null?`<span class="fi-pill">${imp.toFixed(1)}%</span>`:''}`;
+                breakdown.appendChild(div);
+            });
+            if (data.explanation.thresholds) {
+                const th = data.explanation.thresholds;
+                const div = document.createElement('div');
+                div.className='breakdown-row';
+                div.innerHTML=`<span class="br-label" style="font-size:11px;color:var(--muted);">Thresholds: APPROVE &lt; ${th.approve} · CONDITIONAL &lt; ${th.conditional} · REJECT ≥ ${th.conditional}</span>`;
+                breakdown.appendChild(div);
             }
+            const methodDiv = document.createElement('div');
+            methodDiv.className='breakdown-row';
+            methodDiv.innerHTML=`<span class="br-label">Forecast Engine</span><span class="br-value" style="color:var(--accent2);">${data.forecast_method==='quantile_gbm'?'Quantile GBM':'Historical Percentile'}</span>`;
+            breakdown.appendChild(methodDiv);
+        }
 
-            try {
-                const resp = await fetch('/api/predict', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body),
-                });
+        // Trigger reflow for animations
+        void results.offsetWidth;
+        results.style.display='block';
+        results.scrollIntoView({behavior:'smooth', block:'start'});
 
-                const data = await resp.json();
-
-                if (!resp.ok) {
-                    errorBox.textContent = data.error || `Request failed (${resp.status})`;
-                    errorBox.style.display = 'block';
-                    btn.disabled = false;
-                    btn.textContent = '🔍 Get Prediction';
-                    return;
-                }
-
-                // ── Populate results ──
-                const riskEl = document.getElementById('riskScore');
-                riskEl.textContent = data.risk_score.toFixed(3);
-                riskEl.style.color = data.risk_score < 0.35 ? '#2d8a4e' : data.risk_score < 0.60 ? '#d4a017' : '#c0392b';
-
-                const decEl = document.getElementById('decision');
-                decEl.innerHTML = `<span class="badge ${data.decision.toLowerCase()}">${data.decision}</span>`;
-
-                document.getElementById('ltvValue').textContent = data.recommended_ltv_pct + '%';
-
-                if (data.recommended_loan_amount != null) {
-                    document.getElementById('maxLoan').textContent = '₹' + data.recommended_loan_amount.toLocaleString();
-                } else {
-                    document.getElementById('maxLoan').textContent = '—';
-                }
-
-                // Resolution info
-                const resInfo = document.getElementById('resolutionInfo');
-                let resText = '';
-                if (data.resolution_type && data.resolution_type !== 'exact_match') {
-                    resText = `ℹ️ Location resolved via ${data.resolution_type.replace(/_/g, ' ')}: ${data.mandi_id}`;
-                    if (data.mandi_distance_km) {
-                        resText += ` (${data.mandi_distance_km} km away)`;
-                    }
-                }
-                if (data.nasa_weather_used) {
-                    resText += (resText ? ' | ' : '') + '🛰️ Live NASA weather data used';
-                }
-                if (data.used_snapshot) {
-                    resText += (resText ? ' | ' : '') + '📊 Serving snapshot data used';
-                } else if (data.nasa_weather_used) {
-                    resText += (resText ? ' | ' : '') + '📡 Weather-only prediction (no price history available)';
-                }
-                if (resText) {
-                    resInfo.textContent = resText;
-                    resInfo.style.display = 'block';
-                } else {
-                    resInfo.style.display = 'none';
-                }
-
-                // Forecast chart
-                if (data.forecast && Object.keys(data.forecast).length > 0) {
-                    drawForecastChart('forecastChart', data.forecast);
-                }
-
-                // Explanation table
-                const tbody = document.querySelector('#explanationTable tbody');
-                tbody.innerHTML = '';
-                if (data.explanation && data.explanation.components) {
-                    const comp = data.explanation.components;
-                    const fi = data.explanation.feature_importance || {};
-                    const rows = [
-                        ['Price CV (volatility)', comp.price_cv?.toFixed(4), fi.price_cv],
-                        ['Forecast Uncertainty', comp.forecast_uncertainty?.toFixed(4), fi.forecast_uncertainty],
-                        ['Warehouse Count', comp.n_warehouses, fi.warehouse_gap],
-                        ['Warehouse Grade', comp.warehouse_grade, fi.warehouse_grade],
-                        ['Commodity Risk Tier', comp.commodity_tier?.toFixed(2), fi.commodity_tier],
-                        ['Season', comp.season, fi.season_risk],
-                    ];
-                    for (const [label, value, importance] of rows) {
-                        const tr = document.createElement('tr');
-                        const impText = importance != null ? ` <span class="fi-badge">${importance.toFixed(1)}%</span>` : '';
-                        tr.innerHTML = `<td>${label}</td><td><strong>${value ?? '—'}</strong>${impText}</td>`;
-                        tbody.appendChild(tr);
-                    }
-                    // Add thresholds
-                    if (data.explanation.thresholds) {
-                        const th = data.explanation.thresholds;
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `<td style="color:#999" colspan="2" style="font-size:11px">Thresholds: APPROVE &lt; ${th.approve}, CONDITIONAL &lt; ${th.conditional}, REJECT ≥ ${th.conditional}</td>`;
-                        tbody.appendChild(tr);
-                    }
-                }
-
-                // Forecast method
-                if (data.forecast_method) {
-                    const tr = document.createElement('tr');
-                    const methodLabel = data.forecast_method === 'quantile_gbm' ? 'ML Forecast (Quantile GBM)' : 'Statistical Fallback';
-                    tr.innerHTML = `<td>Forecast Method</td><td><em>${methodLabel}</em></td>`;
-                    tbody.appendChild(tr);
-                }
-
-                resultsDiv.style.display = 'block';
-
-            } catch (err) {
-                errorBox.textContent = 'Network error: ' + err.message;
-                errorBox.style.display = 'block';
-            }
-
-            btn.disabled = false;
-            btn.textContent = '🔍 Get Prediction';
-        });
-
-        // ── Redraw chart on window resize ──────────────────────────────
-        let lastForecast = null;
-        const origDraw = drawForecastChart;
-        // We'll store the last forecast data to redraw
-        const _origSubmit = document.getElementById('predictForm').onsubmit;
-        // Patch: store forecast on successful render
-        const observer = new MutationObserver(() => {
-            const chart = document.getElementById('forecastChart');
-            if (chart && chart.dataset.forecast) {
-                try { drawForecastChart('forecastChart', JSON.parse(chart.dataset.forecast)); } catch(e) {}
-            }
-        });
-    </script>
+    } catch(err) {
+        document.getElementById('errorText').textContent = 'Network error: ' + err.message;
+        errorBox.style.display='flex';
+    } finally {
+        btn.disabled=false; spinner.style.display='none'; btnText.textContent='Get Prediction'; btnIcon.style.display='';
+    }
+});
+</script>
 </body>
 </html>
